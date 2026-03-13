@@ -69,7 +69,7 @@ const SheetRender = (function () {
     ctx.restore();
   }
 
-  async function drawSheet(state, canvas, isPreview) {
+  async function drawSheet(state, canvas, isPreview, onProgress) {
     const w = canvas.width || W;
     const h = canvas.height || H;
     const scale = isPreview ? Math.min(w / W, h / H) : 1;
@@ -78,6 +78,14 @@ const SheetRender = (function () {
 
     // Canvas でカスタムフォントを確実に使うため、描画前に明示的にロード
     try { await document.fonts.load('100px "RyakjiToge"'); } catch (_) {}
+
+    // 進捗管理: テンプレート1 + ポケモン6体×5項目(画像・シャドウ・技タイプ×3) = 31ワーク
+    const TOTAL_WORK = 1 + 6 * 5;
+    let doneWork = 0;
+    const tick = () => {
+      doneWork++;
+      if (onProgress) onProgress(Math.min(100, Math.round(doneWork / TOTAL_WORK * 100)));
+    };
 
     ctx.save();
     if (isPreview) ctx.scale(scale, scale);
@@ -90,6 +98,7 @@ const SheetRender = (function () {
       ctx.fillStyle = "#f0f0f0";
       ctx.fillRect(0, 0, W, H);
     }
+    tick(); // テンプレート完了
 
     const handleName = (state.handleName || "").trim();
     const trainerName = (state.trainerName || "").trim();
@@ -100,10 +109,8 @@ const SheetRender = (function () {
     if (trainerName) drawText(ctx, trainerName, l.trainerName.pos.x, l.trainerName.pos.y, l.trainerName.size, l.trainerName.align, l.trainerName.baseline);
     if (friendCode) drawText(ctx, friendCode, l.friendCode.pos.x, l.friendCode.pos.y, l.friendCode.size, l.friendCode.align, l.friendCode.baseline);
 
-    const typeFolder = (typeof CONFIG !== "undefined" && CONFIG.typeIconFolder) ? CONFIG.typeIconFolder : "Image/Type&shadow";
     const shadowLightFolder = (typeof CONFIG !== "undefined" && CONFIG.shadowLightIconFolder) ? CONFIG.shadowLightIconFolder : "Image/Type&shadow";
     const iconSize = 64 * layout.pokemon[1].scale;
-    const typeIconSize = 64 * layout.pokemon[4].scale;
 
     for (let i = 0; i < 6; i++) {
       const pokemon = (state.pokemons && state.pokemons[i]) || {};
@@ -121,15 +128,15 @@ const SheetRender = (function () {
 
       drawText(ctx, name, add(l.pokemon[0].name).x, add(l.pokemon[0].name).y, l.pokemon[0].size, l.pokemon[0].align, l.pokemon[0].baseline);
 
+      // ① ポケモン画像
       const recognitionAttempted = !!(state.recognitionAttempted);
       if (dexNo && DataService) {
         const p = DataService.getPokemonByDexNo(dexNo);
         const picPath = (p && p.picPath) || "Image/Pic/" + dexNo + ".png";
         try {
           const img = await loadImage(picPath);
-          const sz = iconSize;
           const p0 = add(l.pokemon[1].img);
-          ctx.drawImage(img, p0.x - sz / 2, p0.y - sz / 2, sz, sz);
+          ctx.drawImage(img, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
         } catch (_) {
           try {
             const q = await loadImage("Image/Pic/Question_Mark.png");
@@ -144,9 +151,11 @@ const SheetRender = (function () {
           ctx.drawImage(q, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
         } catch (_) {}
       }
+      tick(); // ①完了
 
       if (cp) drawText(ctx, "CP " + cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
 
+      // ② シャドウ/ライトアイコン
       if (isShadow || isLight) {
         const iconName = isShadow ? "shadow.png" : "light.png";
         try {
@@ -156,6 +165,11 @@ const SheetRender = (function () {
           ctx.drawImage(slImg, p0.x - slSize / 2, p0.y - slSize / 2, slSize, slSize);
         } catch (_) {}
       }
+      tick(); // ②完了
+
+      // ③④⑤ 技タイプアイコン（常に tick することで合計を保証）
+      const getMoveType = (m) => DataService ? DataService.getMoveTypeName(m) : null;
+      const dispName = (m) => DataService ? DataService.getDisplayMoveName(m) : m;
 
       const drawTypeIcon = async (typeName, posObj) => {
         if (!typeName || !DataService) return;
@@ -170,33 +184,36 @@ const SheetRender = (function () {
         } catch (_) {}
       };
 
-      const getMoveType = (m) => DataService ? DataService.getMoveTypeName(m) : null;
-      const dispName = (m) => DataService ? DataService.getDisplayMoveName(m) : m;
+      const fastType = getMoveType(fast);
       if (fast) {
-        const t = getMoveType(fast);
-        if (t) await drawTypeIcon(t, l.pokemon[4].fastType);
+        if (fastType) await drawTypeIcon(fastType, l.pokemon[4].fastType);
         drawText(ctx, dispName(fast), add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, l.pokemon[5].size, l.pokemon[5].align, l.pokemon[5].baseline);
       }
+      tick(); // ③完了
+
+      const charge1Type = getMoveType(charge1);
       if (charge1) {
-        const t = getMoveType(charge1);
-        if (t) await drawTypeIcon(t, l.pokemon[6].charge1Type);
+        if (charge1Type) await drawTypeIcon(charge1Type, l.pokemon[6].charge1Type);
         drawText(ctx, dispName(charge1), add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, l.pokemon[7].size, l.pokemon[7].align, l.pokemon[7].baseline);
       }
+      tick(); // ④完了
+
+      const charge2Type = getMoveType(charge2);
       if (charge2) {
-        const t = getMoveType(charge2);
-        if (t) await drawTypeIcon(t, l.pokemon[8].charge2Type);
+        if (charge2Type) await drawTypeIcon(charge2Type, l.pokemon[8].charge2Type);
         drawText(ctx, dispName(charge2), add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, l.pokemon[9].size, l.pokemon[9].align, l.pokemon[9].baseline);
       }
+      tick(); // ⑤完了
     }
 
     ctx.restore();
   }
 
-  async function renderToBlob(state) {
+  async function renderToBlob(state, onProgress) {
     const canvas = document.createElement("canvas");
     canvas.width = W;
     canvas.height = H;
-    await drawSheet(state, canvas, false);
+    await drawSheet(state, canvas, false, onProgress);
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 

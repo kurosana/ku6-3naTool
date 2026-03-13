@@ -30,6 +30,29 @@
   };
 
   const $ = (id) => document.getElementById(id);
+
+  // ─── 進捗オーバーレイ共通ヘルパー ──────────────────────────────
+  function showProgress() {
+    const el = document.getElementById("overlay-progress");
+    if (el) { el.classList.add("active"); el.setAttribute("aria-hidden", "false"); }
+  }
+  function hideProgress() {
+    const el = document.getElementById("overlay-progress");
+    if (el) { el.classList.remove("active"); el.setAttribute("aria-hidden", "true"); }
+    const bar = document.getElementById("progress-overlay-bar");
+    const txt = document.getElementById("progress-overlay-text");
+    if (bar) bar.style.width = "0%";
+    if (txt) txt.textContent = "0% 完了";
+  }
+  function setProgress(percent) {
+    const p = Math.min(100, Math.max(0, Math.round(percent)));
+    const bar = document.getElementById("progress-overlay-bar");
+    const txt = document.getElementById("progress-overlay-text");
+    if (bar) bar.style.width = p + "%";
+    if (txt) txt.textContent = p + "% 完了";
+  }
+  // ───────────────────────────────────────────────────────────────
+
   const screens = {
     entrance: $("screen-entrance"),
     sheet: $("screen-sheet"),
@@ -102,22 +125,6 @@
       if (!file || !file.type.startsWith("image/")) return;
       const img = new Image();
       img.onload = async () => {
-          const progressOverlay = document.getElementById("overlay-progress");
-        const progressText = document.getElementById("progress-overlay-text");
-        const progressBar = document.getElementById("progress-overlay-bar");
-        const showProgress = () => {
-          if (progressOverlay) { progressOverlay.classList.add("active"); progressOverlay.setAttribute("aria-hidden", "false"); }
-        };
-        const hideProgress = () => {
-          if (progressOverlay) { progressOverlay.classList.remove("active"); progressOverlay.setAttribute("aria-hidden", "true"); }
-          if (progressBar) progressBar.style.width = "0%";
-          if (progressText) progressText.textContent = "0% 完了";
-        };
-        const setProgress = (percent) => {
-          const p = Math.min(100, Math.max(0, Math.round(percent)));
-          if (progressText) progressText.textContent = p + "% 完了";
-          if (progressBar) progressBar.style.width = p + "%";
-        };
         showProgress();
         try {
           const result = await Recognition.recognize(img, { onProgress: setProgress });
@@ -315,7 +322,12 @@
     canvas.style.width = w + "px";
     canvas.style.height = h + "px";
     await document.fonts.ready;
-    await SheetRender.drawSheet(state, canvas, true);
+    showProgress();
+    try {
+      await SheetRender.drawSheet(state, canvas, true, setProgress);
+    } finally {
+      hideProgress();
+    }
     overlay.classList.add("active");
     overlay.setAttribute("aria-hidden", "false");
   }
@@ -527,9 +539,10 @@
 
   async function outputImage() {
     saveInputs();
+    showProgress();
     try {
       await document.fonts.ready;
-      const blob = await SheetRender.renderToBlob(state);
+      const blob = await SheetRender.renderToBlob(state, setProgress);
       const url = URL.createObjectURL(blob);
       const win = window.open("", "_blank");
       if (win) {
@@ -545,7 +558,10 @@
       });
       list.unshift({ dataUrl, at: Date.now() });
       saveHistory(list);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      hideProgress();
+    }
   }
 
   function renderHistory() {
