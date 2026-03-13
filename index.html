@@ -26,8 +26,8 @@
       <header class="sheet-header">
         <button type="button" class="btn-back" id="btn-back-sheet">戻る</button>
         <div class="sheet-header-actions">
-          <button type="button" class="btn-preview" id="btn-preview">プレビュー表示</button>
-          <button type="button" class="btn-output" id="btn-output">画像を出力</button>
+          <button type="button" class="btn-preview" id="btn-preview"><span>プレビュー</span><span>表示</span></button>
+          <button type="button" class="btn-output" id="btn-output"><span>画像</span><span>出力</span></button>
         </div>
       </header>
       <div class="sheet-scroll">
@@ -66,6 +66,7 @@
     <div class="preview-overlay-backdrop"></div>
     <div class="preview-overlay-box">
       <button type="button" class="btn-close-preview" id="btn-close-preview" aria-label="閉じる">×</button>
+      <p class="preview-overlay-note">※画像を取得する場合は「画像出力」を行ってください</p>
       <div id="preview-overlay-content" class="preview-overlay-content"></div>
     </div>
   </div>
