@@ -76,6 +76,9 @@ const SheetRender = (function () {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, w, h);
 
+    // Canvas でカスタムフォントを確実に使うため、描画前に明示的にロード
+    try { await document.fonts.load('100px "RyakjiToge"'); } catch (_) {}
+
     ctx.save();
     if (isPreview) ctx.scale(scale, scale);
 
@@ -99,8 +102,8 @@ const SheetRender = (function () {
 
     const typeFolder = (typeof CONFIG !== "undefined" && CONFIG.typeIconFolder) ? CONFIG.typeIconFolder : "Image/Type&shadow";
     const shadowLightFolder = (typeof CONFIG !== "undefined" && CONFIG.shadowLightIconFolder) ? CONFIG.shadowLightIconFolder : "Image/Type&shadow";
-    const iconSize = 64 * (layout.pokemon[1].scale / 6.5);
-    const typeIconSize = 64 * (layout.pokemon[4].scale / 6.5);
+    const iconSize = 64 * layout.pokemon[1].scale;
+    const typeIconSize = 64 * layout.pokemon[4].scale;
 
     for (let i = 0; i < 6; i++) {
       const pokemon = (state.pokemons && state.pokemons[i]) || {};
@@ -124,7 +127,7 @@ const SheetRender = (function () {
         const picPath = (p && p.picPath) || "Image/Pic/" + dexNo + ".png";
         try {
           const img = await loadImage(picPath);
-          const sz = img.naturalWidth === 128 ? iconSize / 2 : iconSize;
+          const sz = iconSize;
           const p0 = add(l.pokemon[1].img);
           ctx.drawImage(img, p0.x - sz / 2, p0.y - sz / 2, sz, sz);
         } catch (_) {
@@ -142,13 +145,13 @@ const SheetRender = (function () {
         } catch (_) {}
       }
 
-      if (cp) drawText(ctx, cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
+      if (cp) drawText(ctx, isPreview ? cp : "CP " + cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
 
-      if (!isPreview && (isShadow || isLight)) {
+      if (isShadow || isLight) {
         const iconName = isShadow ? "shadow.png" : "light.png";
         try {
           const slImg = await loadImage(shadowLightFolder + "/" + iconName);
-          const slSize = 64 * (l.pokemon[3].scale / 6.5);
+          const slSize = 64 * l.pokemon[3].scale;
           const p0 = add(l.pokemon[3].shadowLight);
           ctx.drawImage(slImg, p0.x - slSize / 2, p0.y - slSize / 2, slSize, slSize);
         } catch (_) {}
@@ -160,27 +163,29 @@ const SheetRender = (function () {
         if (!path) return;
         try {
           const ti = await loadImage(path);
+          // 画像の実サイズ × 275% で描画（24px画像なら66px、64px画像なら176px）
+          const ts = ti.naturalWidth * layout.pokemon[4].scale;
           const p0 = add(posObj);
-          const ts = typeIconSize;
           ctx.drawImage(ti, p0.x - ts / 2, p0.y - ts / 2, ts, ts);
         } catch (_) {}
       };
 
-      const moveInfo = (m) => (DataService && DataService.getMoveInfo(m));
+      const getMoveType = (m) => DataService ? DataService.getMoveTypeName(m) : null;
+      const dispName = (m) => DataService ? DataService.getDisplayMoveName(m) : m;
       if (fast) {
-        const info = moveInfo(fast);
-        if (info) await drawTypeIcon(info.type, l.pokemon[4].fastType);
-        drawText(ctx, fast, add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, l.pokemon[5].size, l.pokemon[5].align, l.pokemon[5].baseline);
+        const t = getMoveType(fast);
+        if (t) await drawTypeIcon(t, l.pokemon[4].fastType);
+        drawText(ctx, dispName(fast), add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, l.pokemon[5].size, l.pokemon[5].align, l.pokemon[5].baseline);
       }
       if (charge1) {
-        const info = moveInfo(charge1);
-        if (info) await drawTypeIcon(info.type, l.pokemon[6].charge1Type);
-        drawText(ctx, charge1, add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, l.pokemon[7].size, l.pokemon[7].align, l.pokemon[7].baseline);
+        const t = getMoveType(charge1);
+        if (t) await drawTypeIcon(t, l.pokemon[6].charge1Type);
+        drawText(ctx, dispName(charge1), add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, l.pokemon[7].size, l.pokemon[7].align, l.pokemon[7].baseline);
       }
       if (charge2) {
-        const info = moveInfo(charge2);
-        if (info) await drawTypeIcon(info.type, l.pokemon[8].charge2Type);
-        drawText(ctx, charge2, add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, l.pokemon[9].size, l.pokemon[9].align, l.pokemon[9].baseline);
+        const t = getMoveType(charge2);
+        if (t) await drawTypeIcon(t, l.pokemon[8].charge2Type);
+        drawText(ctx, dispName(charge2), add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, l.pokemon[9].size, l.pokemon[9].align, l.pokemon[9].baseline);
       }
     }
 

@@ -245,9 +245,9 @@
             <button type="button" class="shadow-light-btn ${p.isLight ? "pressed" : ""}" data-slot="${i}" data-btn="light" title="ライト"><img src="${shadowLightPath}light.png" alt="ライト"></button>
           </div>
           <div class="slot-moves">
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>
           </div>
         </div>`;
     }).join("");
@@ -275,6 +275,9 @@
           const key = field === "fast" ? "fast" : field === "charge1" ? "charge1" : "charge2";
           state.pokemons[slotIndex][key] = el.value;
           updateTypeIcon(slotIndex, key, el.value);
+          // 折り畳み表示スパンを短縮名で更新
+          const disp = el.parentElement && el.parentElement.querySelector(".move-display");
+          if (disp) disp.textContent = el.value && DataService ? DataService.getDisplayMoveName(el.value) : "";
         });
         if (el.value) updateTypeIcon(slotIndex, field, el.value);
       }
@@ -327,8 +330,8 @@
 
   function updateTypeIcon(slotIndex, moveKey, moveName) {
     if (!DataService || !moveName) return;
-    const info = DataService.getMoveInfo(moveName);
-    const path = info && DataService.getTypeIconPath(info.type);
+    const typeName = DataService.getMoveTypeName(moveName);
+    const path = typeName && DataService.getTypeIconPath(typeName);
     const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
     const icon = document.querySelector(`.slot-moves .move-type-icon[data-slot="${slotIndex}"][data-move="${moveKey}"]`);
     if (icon) {

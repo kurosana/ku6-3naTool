@@ -224,13 +224,13 @@ body {
 
 .pokemon-slots {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(168px, 1fr));
+  gap: 0.5rem;
   margin-top: 1.5rem;
 }
 @media (min-width: 600px) {
   .pokemon-slots {
-    grid-template-columns: repeat(3, minmax(160px, 1fr));
+    grid-template-columns: repeat(3, minmax(168px, 1fr));
   }
 }
 
@@ -336,13 +336,45 @@ body {
   gap: 0.25rem;
   margin-bottom: 0.2rem;
 }
-.pokemon-slot .slot-moves .move-row select {
+.pokemon-slot .slot-moves .move-select-wrap {
+  position: relative;
   flex: 1;
+  min-width: 0;
+}
+.pokemon-slot .slot-moves .move-row select {
+  width: 100%;
   padding: 0.2rem;
   font-size: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: #fff;
+  /* 折り畳み状態の選択テキストを透明にし、下のスパンで短縮名を表示する */
+  color: transparent;
+}
+/* ネイティブドロップダウン内の option は通常色で表示 */
+.pokemon-slot .slot-moves .move-row select option {
+  color: var(--text);
+  background: #fff;
+}
+/* disabled 時はスパンを非表示 */
+.pokemon-slot .slot-moves .move-row select:disabled ~ .move-display {
+  display: none;
+}
+.pokemon-slot .slot-moves .move-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 1.1rem; /* ドロップダウン矢印の分を空ける */
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
 }
 .pokemon-slot .slot-moves .move-type-icon {
   width: 18px;
@@ -550,7 +582,6 @@ body {
   width: 0%;
   background: var(--btn-primary);
   border-radius: 999px;
-  transition: width 0.15s ease-out;
 }
 
 /* ========== 画像認識デバッグオーバーレイ ========== */

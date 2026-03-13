@@ -114,10 +114,15 @@ const DataService = (function () {
     return pokemonList.find((p) => p.name === name);
   }
 
+  // ひらがな → カタカナ変換（検索時にひらがな入力でもヒットさせるため）
+  function toKatakana(str) {
+    return str.replace(/[\u3041-\u3096]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+  }
+
   function searchPokemon(query) {
-    const q = (query || "").trim().toLowerCase();
+    const q = toKatakana((query || "").trim().toLowerCase());
     if (!q) return pokemonList.slice(0, 100);
-    return pokemonList.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 100);
+    return pokemonList.filter((p) => toKatakana(p.name.toLowerCase()).includes(q)).slice(0, 100);
   }
 
   function getMovesForPokemon(dexNo) {
@@ -167,6 +172,30 @@ const DataService = (function () {
     return typeMap[typeName] || "";
   }
 
+  /**
+   * 技名の表示用文字列を返す（内部データは変更しない）
+   * - "めざめるパワーほのお" → "めざめるパワー"
+   * - "わざ名（タイプ）" のような括弧付き → "わざ名"
+   */
+  function getDisplayMoveName(moveName) {
+    if (!moveName) return moveName;
+    if (/^めざめるパワー./.test(moveName)) return "めざめるパワー";
+    return moveName.replace(/[（(][^）)]*[）)]/g, "").trim();
+  }
+
+  /**
+   * 技名からタイプ名を返す（タイプアイコン表示用）
+   * - "めざめるパワーほのお" → "ほのお"（move_list.csv に頼らず後ろのタイプ名を使用）
+   * - 通常技 → move_list.csv のタイプ
+   */
+  function getMoveTypeName(moveName) {
+    if (!moveName) return null;
+    const m = moveName.match(/^めざめるパワー(.+)$/);
+    if (m) return m[1];
+    const info = getMoveInfo(moveName);
+    return info ? info.type : null;
+  }
+
   return {
     loadAll,
     getPokemonList,
@@ -177,6 +206,8 @@ const DataService = (function () {
     getMoveInfo,
     getDefaultMoves,
     getTypeIconPath,
+    getDisplayMoveName,
+    getMoveTypeName,
     get moveList() {
       return moveList;
     },

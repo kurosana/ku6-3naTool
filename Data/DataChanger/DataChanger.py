@@ -4,10 +4,6 @@ import csv
 import shutil
 import os
 
-# =========================
-# ファイル
-# =========================
-
 MOVE_FILE = "move_list.csv"
 MOVE_BACK = "move_list_back.csv"
 
@@ -15,9 +11,17 @@ POKE_MOVE_FILE = "poke_movelist.csv"
 POKE_FILE = "pokemon_list.csv"
 POKE_BACK = "pokemon_list_back.csv"
 
-# =========================
-# CSV読み込み
-# =========================
+
+def to_hiragana(text):
+    result = ""
+    for c in text:
+        code = ord(c)
+        if 0x30A1 <= code <= 0x30F6:
+            result += chr(code - 0x60)
+        else:
+            result += c
+    return result
+
 
 def load_csv(path):
     data = []
@@ -35,9 +39,6 @@ def save_csv(path, rows):
         writer = csv.writer(f)
         writer.writerows(rows)
 
-# =========================
-# バックアップ復元
-# =========================
 
 def restore_backup():
 
@@ -75,9 +76,6 @@ def restore_backup():
 
         save_csv(POKE_FILE, poke)
 
-# =========================
-# 技リスト取得
-# =========================
 
 def load_pokemon_moves():
 
@@ -91,22 +89,19 @@ def load_pokemon_moves():
             continue
 
         flag = r[0]
-        name = r[2]
+        dex = r[1]
         moves = r[3:]
 
-        if name not in move_map:
-            move_map[name] = {"fast": [], "charge": []}
+        if dex not in move_map:
+            move_map[dex] = {"fast": [], "charge": []}
 
         if flag == "0":
-            move_map[name]["fast"] = moves
+            move_map[dex]["fast"] = moves
         else:
-            move_map[name]["charge"] = moves
+            move_map[dex]["charge"] = moves
 
     return move_map
 
-# =========================
-# GUI
-# =========================
 
 class App:
 
@@ -137,15 +132,9 @@ class App:
 
         self.show_status("バックアップを復元しました")
 
-    # =========================
-
     def show_status(self, text):
         self.status.config(text=text)
         self.root.after(5000, lambda: self.status.config(text=""))
-
-    # =========================
-    # ポケモンタブ
-    # =========================
 
     def build_pokemon_tab(self):
 
@@ -207,13 +196,15 @@ class App:
 
     def search_pokemon(self):
 
-        word = self.poke_search.get()
+        word = to_hiragana(self.poke_search.get())
 
         self.poke_listbox.delete(0, tk.END)
 
         for r in self.pokemon_data:
-            if len(r) >= 2 and word in r[1]:
-                self.poke_listbox.insert(tk.END, f"{r[0]}-{r[1]}")
+            if len(r) >= 2:
+                name = to_hiragana(r[1])
+                if word in name:
+                    self.poke_listbox.insert(tk.END, f"{r[0]}|{r[1]}")
 
     def select_pokemon(self, e):
 
@@ -222,7 +213,7 @@ class App:
             return
 
         text = self.poke_listbox.get(idx)
-        dex, name = text.split("-", 1)
+        dex, name = text.split("|", 1)
 
         self.current_pokemon = (dex, name)
         self.target_name.config(text=f"{dex}-{name}")
@@ -241,11 +232,11 @@ class App:
                 self.charge1_var.set(r[5])
                 self.charge2_var.set(r[6])
 
-        if name in self.move_map:
+        if dex in self.move_map:
 
-            self.fast_box["values"] = self.move_map[name]["fast"]
-            self.charge1_box["values"] = self.move_map[name]["charge"]
-            self.charge2_box["values"] = self.move_map[name]["charge"]
+            self.fast_box["values"] = self.move_map[dex]["fast"]
+            self.charge1_box["values"] = self.move_map[dex]["charge"]
+            self.charge2_box["values"] = self.move_map[dex]["charge"]
 
     def save_pokemon(self):
 
@@ -269,10 +260,6 @@ class App:
         shutil.copy(POKE_FILE, POKE_BACK)
 
         self.show_status("保存しました")
-
-    # =========================
-    # 技優先度タブ
-    # =========================
 
     def build_move_tab(self):
 
@@ -356,7 +343,6 @@ class App:
 
         self.show_status("保存しました")
 
-# =========================
 
 restore_backup()
 
