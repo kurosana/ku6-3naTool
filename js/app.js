@@ -126,6 +126,8 @@
       const img = new Image();
       img.onload = async () => {
         showProgress();
+        const hint = document.getElementById("progress-overlay-hint");
+        if (hint) { hint.setAttribute("aria-hidden", "false"); }
         try {
           const result = await Recognition.recognize(img, { onProgress: setProgress });
           openSheetWithRecognitionResult(result);
@@ -135,6 +137,7 @@
           });
           openSheetWithRecognitionResult(failed);
         } finally {
+          if (hint) { hint.setAttribute("aria-hidden", "true"); }
           hideProgress();
         }
       };

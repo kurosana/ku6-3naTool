@@ -564,6 +564,15 @@ body {
   padding: 1.5rem 2rem;
   min-width: 240px;
 }
+.overlay-progress .progress-overlay-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-muted, #888);
+  text-align: center;
+}
+.overlay-progress .progress-overlay-hint[aria-hidden="true"] {
+  display: none;
+}
 .overlay-progress .progress-overlay-text {
   margin: 0 0 0.75rem;
   font-size: 1rem;
