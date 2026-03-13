@@ -52,6 +52,9 @@ const CONFIG = {
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※初回時のみ少し時間かかります",
   labelRecognitionHint2: "お気に入りマーク(★)があると認識精度落ちます",
+  labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材提供求）",
+  labelSheetNote2: "→色違い・お気に入りマーク・24時間以内捕獲の背景があると失敗します",
+  labelSheetNote3: "→認識されなかった場合は「画像認識失敗」をタッチして手動でお願いします",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",
   labelFriendCode: "フレンドコード",

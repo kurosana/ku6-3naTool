@@ -690,12 +690,25 @@
 
   $("btn-back-history").addEventListener("click", () => showScreen("entrance"));
 
+  function initSheetNote() {
+    const el = document.getElementById("sheet-note");
+    if (!el) return;
+    const lines = [
+      (CONFIG && CONFIG.labelSheetNote1) || "",
+      (CONFIG && CONFIG.labelSheetNote2) || "",
+      (CONFIG && CONFIG.labelSheetNote3) || "",
+    ].filter(s => s.trim() !== "");
+    el.innerHTML = lines.join("<br>");
+    el.style.display = lines.length ? "" : "none";
+  }
+
   async function boot() {
     try {
       await DataService.loadAll();
     } catch (e) {
       console.error(e);
     }
+    initSheetNote();
     initEntrance();
     showScreen("entrance");
   }
