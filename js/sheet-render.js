@@ -145,7 +145,7 @@ const SheetRender = (function () {
         } catch (_) {}
       }
 
-      if (cp) drawText(ctx, isPreview ? cp : "CP " + cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
+      if (cp) drawText(ctx, "CP " + cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
 
       if (isShadow || isLight) {
         const iconName = isShadow ? "shadow.png" : "light.png";

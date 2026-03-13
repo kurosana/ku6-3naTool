@@ -183,7 +183,7 @@ const Recognition = (function () {
     return { gray, bgMask };
   }
 
-  async function loadSearchTemplate() {
+  async function loadSearchTemplate(onOneLoaded) {
     const path = (typeof CONFIG !== "undefined" && CONFIG.recognitionSearchTemplatePath) ? CONFIG.recognitionSearchTemplatePath : "Image/Match/Searching.png";
     try {
       const img = await loadImage(pathJoin(BASE, path));
@@ -194,9 +194,10 @@ const Recognition = (function () {
     } catch (_) {
       searchTemplate = null;
     }
+    if (onOneLoaded) onOneLoaded();
   }
 
-  async function loadMatchTemplates(manifest) {
+  async function loadMatchTemplates(manifest, onOneLoaded) {
     const list = (manifest || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const pokemonList = DataService.getPokemonList();
     const byPath = {};
@@ -264,11 +265,12 @@ const Recognition = (function () {
       } catch (_) {
         /* skip */
       }
+      if (onOneLoaded) onOneLoaded();
     }
     matchTemplates = loaded;
   }
 
-  async function loadCPTemplates() {
+  async function loadCPTemplates(onOneLoaded) {
     const size = 24;
     const loaded = [];
     for (let cp = 1500; cp >= 1480; cp--) {
@@ -293,12 +295,16 @@ const Recognition = (function () {
       } catch (_) {
         /* skip */
       }
+      if (onOneLoaded) onOneLoaded();
     }
     cpTemplates = loaded;
   }
 
-  async function ensureTemplates() {
-    if (templatesLoaded) return;
+  async function ensureTemplates(onLoadProgress) {
+    if (templatesLoaded) {
+      if (onLoadProgress) onLoadProgress(100);
+      return;
+    }
     let manifestText = "";
     let usedFallback = false;
     try {
@@ -312,10 +318,18 @@ const Recognition = (function () {
       const paths = list.slice(0, 350).map((p) => (p.matchPath || "").split("/").pop()).filter(Boolean);
       manifestText = [...new Set(paths)].join("\n");
     }
+    // 進捗カウント用: Match行数 + CP21枚 + Search1枚
+    const manifestLines = manifestText.split(/\n/).filter((s) => s.trim());
+    const totalExpected = manifestLines.length + 21 + 1;
+    let loadedCount = 0;
+    const onOneLoaded = () => {
+      loadedCount++;
+      if (onLoadProgress) onLoadProgress(Math.min(100, Math.round(loadedCount / totalExpected * 100)));
+    };
     await Promise.all([
-      loadSearchTemplate(),
-      loadMatchTemplates(manifestText),
-      loadCPTemplates(),
+      loadSearchTemplate(onOneLoaded),
+      loadMatchTemplates(manifestText, onOneLoaded),
+      loadCPTemplates(onOneLoaded),
     ]);
     templatesLoaded = true;
     if (typeof console !== "undefined" && console.log) {
@@ -605,8 +619,9 @@ const Recognition = (function () {
   async function recognizeZoneBased(image, options) {
     const onProgress = (options && typeof options.onProgress === "function") ? options.onProgress : function () {};
     onProgress(0);
-    await ensureTemplates();
-    onProgress(5);
+    // テンプレート読み込み: 0→70%
+    await ensureTemplates((p) => { onProgress(Math.round(p * 0.7)); });
+    onProgress(70);
     await yieldToUI();
 
     const w = image.naturalWidth || image.width;
@@ -657,7 +672,8 @@ const Recognition = (function () {
           isLight: pokemonResult.isLight,
         });
       }
-      onProgress(5 + Math.round((slot + 1) / 6 * 90));
+      // 認識フェーズ: 70→100%
+      onProgress(70 + Math.round((slot + 1) / 6 * 30));
       await yieldToUI();
     }
 
