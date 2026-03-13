@@ -101,6 +101,48 @@ const Recognition = (function () {
   }
 
   /**
+   * 重み付き相関。CP認識で一の位（右側）を重視するために使用。
+   * weights[i] が大きいほどそのピクセルの影響が強くなる。
+   */
+  function weightedCorrelation(a, b, weights) {
+    if (a.length !== b.length || a.length === 0) return 0;
+    let sw = 0, swa = 0, swb = 0, swa2 = 0, swb2 = 0, swab = 0;
+    for (let i = 0; i < a.length; i++) {
+      const w = weights[i];
+      sw += w;
+      swa += w * a[i];
+      swb += w * b[i];
+      swa2 += w * a[i] * a[i];
+      swb2 += w * b[i] * b[i];
+      swab += w * a[i] * b[i];
+    }
+    if (sw <= 0) return 0;
+    const na = sw * swa2 - swa * swa;
+    const nb = sw * swb2 - swb * swb;
+    if (na <= 0 || nb <= 0) return 0;
+    return (sw * swab - swa * swb) / Math.sqrt(na * nb);
+  }
+
+  /** CP用の重みマップを生成してキャッシュ。右側 recognitionCpRightWeightPct % を重く扱う */
+  let _cpWeightsCache = null;
+  function getCpWeights(size) {
+    if (_cpWeightsCache && _cpWeightsCache.length === size * size) return _cpWeightsCache;
+    const rightPct = (typeof CONFIG !== "undefined" && CONFIG.recognitionCpRightWeightPct != null)
+      ? CONFIG.recognitionCpRightWeightPct : 0.3;
+    const rightMult = (typeof CONFIG !== "undefined" && CONFIG.recognitionCpRightWeight != null)
+      ? CONFIG.recognitionCpRightWeight : 3.0;
+    const threshold = size * (1 - rightPct);
+    const w = new Float32Array(size * size);
+    for (let j = 0; j < size; j++) {
+      for (let i = 0; i < size; i++) {
+        w[j * size + i] = i >= threshold ? rightMult : 1.0;
+      }
+    }
+    _cpWeightsCache = w;
+    return w;
+  }
+
+  /**
    * マスクが1のピクセルだけで相関を計算。
    * mask: テンプレートの透明部分マスク（1=有効）
    * mask2: スクリーンショット側の背景除外マスク（1=非背景）
@@ -232,7 +274,22 @@ const Recognition = (function () {
     for (let cp = 1500; cp >= 1480; cp--) {
       try {
         const img = await loadImage("Image/CPMatch/" + cp + ".png");
-        loaded.push({ cp, data: imageToGrayData(img, size, size) });
+        // 透明背景を白で合成してからグレースケール変換する
+        // (透明のままだと canvas が黒になり相関が崩れる)
+        const c = document.createElement("canvas");
+        c.width = size;
+        c.height = size;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        const id = ctx.getImageData(0, 0, size, size);
+        const d = id.data;
+        const gray = [];
+        for (let i = 0; i < d.length; i += 4) {
+          gray.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        }
+        loaded.push({ cp, data: gray });
       } catch (_) {
         /* skip */
       }
@@ -527,10 +584,11 @@ const Recognition = (function () {
     const outSize = 24;
     const id = cropAndResize(img, rect.x, rect.y, rect.w, rect.h, outSize, outSize);
     const gray = imageDataToGray(id);
+    const cpWeights = getCpWeights(outSize);
     let best = null;
     let bestScore = 0.5;
     for (const t of cpTemplates) {
-      const r = correlation(gray, t.data);
+      const r = weightedCorrelation(gray, t.data, cpWeights);
       if (r > bestScore) { bestScore = r; best = t.cp; }
     }
     return { cp: best, score: bestScore };

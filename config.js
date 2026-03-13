@@ -30,6 +30,10 @@ const CONFIG = {
   // 左右の濃い背景を除く。コンテンツ幅 = 画像幅 * contentWidthPct、左端 = 画像幅 * contentLeftPct
   recognitionContentLeftPct: 0.06,
   recognitionContentWidthPct: 0.88,
+  // CP認識の右側重み付け（一の位の判別精度向上）
+  // 右から recognitionCpRightWeightPct % のピクセルを recognitionCpRightWeight 倍の重みで判定
+  recognitionCpRightWeightPct: 0.3,
+  recognitionCpRightWeight: 3.0,
   // 背景とみなす色（明るいグラデーション・検索欄）
   recognitionBgGrayMin: 248,
 
