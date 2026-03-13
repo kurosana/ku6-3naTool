@@ -57,9 +57,7 @@ const CONFIG = {
   labelLight: "ライト",
 };
 
-// GitHub Pages などで相対パスで動くように、ベースパスを取得
-const getBasePath = () => {
-  const path = (typeof window !== "undefined" && window.location?.pathname) || "";
-  if (path.endsWith(".html") || path.endsWith("/")) return path.split("/").slice(0, -1).join("/") + "/";
-  return path ? path + "/" : "./";
-};
+// index.html からの相対パスを返す（ローカル・GitHub Pages 両方対応）
+// fetch / img.src の相対パスはページ（index.html）の URL を起点に解決されるため
+// "./" を返すことで環境によらず正しく動作する
+const getBasePath = () => "./";
