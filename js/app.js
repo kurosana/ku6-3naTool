@@ -127,7 +127,10 @@
       img.onload = async () => {
         showProgress();
         const hint = document.getElementById("progress-overlay-hint");
-        if (hint) { hint.setAttribute("aria-hidden", "false"); }
+        if (hint) {
+          hint.textContent = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionHint) ? CONFIG.labelRecognitionHint : "※初回時のみ少し時間かかります";
+          hint.setAttribute("aria-hidden", "false");
+        }
         try {
           const result = await Recognition.recognize(img, { onProgress: setProgress });
           openSheetWithRecognitionResult(result);
