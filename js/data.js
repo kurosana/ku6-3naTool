@@ -55,7 +55,7 @@ const DataService = (function () {
       fetchText("Data/pokemon_list.csv"),
       fetchText("Data/move_list.csv"),
       fetchText("Data/poke_movelist.csv"),
-      fetchText("Data/Type.csv"),
+      fetchText("Data/type.csv"),
     ]);
 
     pokemonList = parseCSV(pokemonCsv).map((row) => ({
