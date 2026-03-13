@@ -117,7 +117,8 @@ const SheetRender = (function () {
       const off = layout.offsets[i];
       const add = (pos) => ({ x: pos.x + off.dx, y: pos.y + off.dy });
 
-      const name = pokemon.name || "";
+      // プレビュー・出力では括弧とその中身を除いた短縮名を表示（例: サンドパン(アローラのすがた) → サンドパン）
+      const name = (pokemon.name || "").replace(/[([（【].*?[)\]）】]/g, "").trim();
       const dexNo = pokemon.dexNo;
       const cp = pokemon.cp != null && pokemon.cp !== "" ? String(pokemon.cp) : "";
       const isShadow = !!pokemon.isShadow;

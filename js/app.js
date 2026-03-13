@@ -548,6 +548,9 @@
       const blob = await SheetRender.renderToBlob(state, setProgress);
       const url = URL.createObjectURL(blob);
 
+      // 出力前にダイアログを閉じる
+      hideProgress();
+
       // ダウンロードリンクで保存（スマホ含む全環境対応）
       const a = document.createElement("a");
       a.href = url;
