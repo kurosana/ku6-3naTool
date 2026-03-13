@@ -131,6 +131,12 @@
           hint.textContent = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionHint) ? CONFIG.labelRecognitionHint : "※初回時のみ少し時間かかります";
           hint.setAttribute("aria-hidden", "false");
         }
+        const hint2 = document.getElementById("progress-overlay-hint2");
+        if (hint2) {
+          const t2 = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionHint2) ? CONFIG.labelRecognitionHint2 : "";
+          hint2.textContent = t2;
+          hint2.setAttribute("aria-hidden", t2 ? "false" : "true");
+        }
         try {
           const result = await Recognition.recognize(img, { onProgress: setProgress });
           openSheetWithRecognitionResult(result);
@@ -141,6 +147,7 @@
           openSheetWithRecognitionResult(failed);
         } finally {
           if (hint) { hint.setAttribute("aria-hidden", "true"); }
+          if (hint2) { hint2.setAttribute("aria-hidden", "true"); }
           hideProgress();
         }
       };

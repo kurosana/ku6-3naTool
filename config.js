@@ -50,7 +50,8 @@ const CONFIG = {
   templatePath: "Image/Template.png",
 
   // ========== 表示用ラベル（必要なら変更可） ==========
-  labelRecognitionHint: "※初回時少し時間かかります",
+  labelRecognitionHint: "※初回時のみ少し時間かかります",
+  labelRecognitionHint2: "お気に入りマーク(★)があると認識精度落ちます",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",
   labelFriendCode: "フレンドコード",
