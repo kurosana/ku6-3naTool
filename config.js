@@ -7,7 +7,7 @@
 const CONFIG = {
   // ========== デバッグ ==========
   // 1 にすると画像認識のデバッグモードがON。読み込んだ画像の切り取り範囲・判定結果をオーバーレイで表示します。
-  debugRecognition: 0,
+  debugRecognition: 1,
 
   // ========== エントランス画面の説明文 ==========
   // 画像読み込みについての説明（「画像を読み込む」ボタンの下に表示）
@@ -23,10 +23,13 @@ const CONFIG = {
   recognitionSearchBarColor: "#e7f4e0",
   recognitionSearchBarTolerance: 25,
   // 基準高さ(refY)の下から: nピクセル空けてCP1, mピクセル高さCP1, lピクセル高さポケモン1, kピクセル空けてCP2。2段目も同様
+  // ※ピクセル値は recognitionRefHeight のスクリーン高さを基準にした値。異なる解像度でも自動スケールされる
   recognitionZoneN: 180,
   recognitionZoneM: 62,
   recognitionZoneL: 210,
   recognitionZoneK: 155,
+  // ゾーンパラメータの基準スクリーン高さ（ピクセル）。読み込み画像の高さに合わせて自動スケールされる
+  recognitionRefHeight: 2556,
   // 左右の濃い背景を除く。コンテンツ幅 = 画像幅 * contentWidthPct、左端 = 画像幅 * contentLeftPct
   recognitionContentLeftPct: 0.06,
   recognitionContentWidthPct: 0.88,

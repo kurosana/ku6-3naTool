@@ -434,54 +434,39 @@ const Recognition = (function () {
     const ih = img.naturalHeight || img.height;
     const sw = searchTemplate.w;
     const sh = searchTemplate.h;
-    const searchLimitY = Math.floor(ih * 0.25);
+
+    // 異なる解像度に対応するため、入力画像を refHeight 相当の縦サイズに正規化してスキャン
+    const refHeight = (typeof CONFIG !== "undefined" && CONFIG.recognitionRefHeight) ? CONFIG.recognitionRefHeight : 2556;
+    const normScale = refHeight / ih;           // 友人環境(小) → 1より大きくなる
+    const normW = Math.round(iw * normScale);
+    // スキャン範囲は上25%だけで十分
+    const normLimitH = Math.round(ih * 0.25 * normScale);
+
+    const normCanvas = document.createElement("canvas");
+    normCanvas.width = normW;
+    normCanvas.height = normLimitH;
+    const normCtx = normCanvas.getContext("2d");
+    normCtx.drawImage(img, 0, 0, iw, Math.ceil(ih * 0.25), 0, 0, normW, normLimitH);
+    const normData = normCtx.getImageData(0, 0, normW, normLimitH);
+
     let bestScore = -1;
-    let bestX = 0;
-    let bestY = 0;
+    let bestNX = 0, bestNY = 0;
     const step = 3;
-    const canvas = document.createElement("canvas");
-    canvas.width = iw;
-    canvas.height = ih;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    const imgData = ctx.getImageData(0, 0, iw, ih);
-    const imgGray = imageDataToGray(imgData);
-    for (let y = 0; y <= searchLimitY - sh; y += step) {
-      for (let x = 0; x <= iw - sw; x += step) {
-        const slice = getGraySlice(imgData, iw, ih, x, y, sw, sh);
+    for (let y = 0; y <= normLimitH - sh; y += step) {
+      for (let x = 0; x <= normW - sw; x += step) {
+        const slice = getGraySlice(normData, normW, normLimitH, x, y, sw, sh);
         const r = correlation(slice, searchTemplate.data);
-        if (r > bestScore) { bestScore = r; bestX = x; bestY = y; }
+        if (r > bestScore) { bestScore = r; bestNX = x; bestNY = y; }
       }
     }
     if (bestScore < 0.5) return null;
-    return { x: bestX, y: bestY, w: sw, h: sh };
-  }
 
-  /** 検索欄の色(#e7f4e0)が終わる行を基準高さとする。searchTopY から下へ走査し、その行の多くが検索欄色でなくなった最初の行を返す */
-  function findRefY(img, searchTopY) {
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    const id = ctx.getImageData(0, 0, w, h);
-    const d = id.data;
-    const [sr, sg, sb] = parseHexColor((typeof CONFIG !== "undefined" && CONFIG.recognitionSearchBarColor) ? CONFIG.recognitionSearchBarColor : "#e7f4e0");
-    const tol = (typeof CONFIG !== "undefined" && CONFIG.recognitionSearchBarTolerance != null) ? CONFIG.recognitionSearchBarTolerance : 25;
-    const barColorRatio = 0.2;
-    const startY = Math.max(0, Math.min(searchTopY, h - 1));
-    for (let y = startY; y < h; y++) {
-      let matchCount = 0;
-      for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const r = d[i], g = d[i + 1], b = d[i + 2];
-        if (Math.abs(r - sr) <= tol && Math.abs(g - sg) <= tol && Math.abs(b - sb) <= tol) matchCount++;
-      }
-      if (matchCount < w * barColorRatio) return y;
-    }
-    return startY;
+    // 正規化座標 → 元画像座標に変換
+    const origX = Math.round(bestNX / normScale);
+    const origY = Math.round(bestNY / normScale);
+    const origW = Math.round(sw / normScale);
+    const origH = Math.round(sh / normScale);
+    return { x: origX, y: origY, w: origW, h: origH };
   }
 
   function getZoneConfig() {
@@ -500,6 +485,15 @@ const Recognition = (function () {
 
   function computeZones(refY, imgW, imgH) {
     const z = getZoneConfig();
+    // スクリーン高さに応じてゾーンパラメータを自動スケール
+    const refHeight = (typeof CONFIG !== "undefined" && CONFIG.recognitionRefHeight) ? CONFIG.recognitionRefHeight : 2556;
+    const scale = imgH / refHeight;
+    const n = Math.round(z.n * scale);
+    const m = Math.round(z.m * scale);
+    const l = Math.round(z.l * scale);
+    const k = Math.round(z.k * scale);
+    const j = m; // j = m（設定を統一済み）
+
     const contentLeft = Math.round(imgW * z.leftPct);
     const contentWidth = Math.round(imgW * z.widthPct);
     const colW = Math.floor(contentWidth / 3);
@@ -508,19 +502,19 @@ const Recognition = (function () {
       { left: contentLeft + colW, width: colW },
       { left: contentLeft + colW * 2, width: contentWidth - colW * 2 },
     ];
-    const cp1Top = refY + z.n;
-    const cp1Bottom = cp1Top + z.m;
+    const cp1Top = refY + n;
+    const cp1Bottom = cp1Top + m;
     const pk1Top = cp1Bottom;
-    const pk1Bottom = pk1Top + z.l;
-    const row2Start = pk1Bottom + z.k;
+    const pk1Bottom = pk1Top + l;
+    const row2Start = pk1Bottom + k;
     const cp2Top = row2Start;
-    const cp2Bottom = cp2Top + z.j;
+    const cp2Bottom = cp2Top + j;
     const pk2Top = cp2Bottom;
-    const pk2Bottom = pk2Top + z.l;
-    const cp1 = cols.map((c) => ({ x: c.left, y: cp1Top, w: c.width, h: z.m }));
-    const pokemon1 = cols.map((c) => ({ x: c.left, y: pk1Top, w: c.width, h: z.l }));
-    const cp2 = cols.map((c) => ({ x: c.left, y: cp2Top, w: c.width, h: z.j }));
-    const pokemon2 = cols.map((c) => ({ x: c.left, y: pk2Top, w: c.width, h: z.l }));
+    const pk2Bottom = pk2Top + l;
+    const cp1 = cols.map((c) => ({ x: c.left, y: cp1Top, w: c.width, h: m }));
+    const pokemon1 = cols.map((c) => ({ x: c.left, y: pk1Top, w: c.width, h: l }));
+    const cp2 = cols.map((c) => ({ x: c.left, y: cp2Top, w: c.width, h: j }));
+    const pokemon2 = cols.map((c) => ({ x: c.left, y: pk2Top, w: c.width, h: l }));
     return { refY, contentLeft, contentWidth, cp1, pokemon1, cp2, pokemon2 };
   }
 
@@ -628,12 +622,10 @@ const Recognition = (function () {
     const h = image.naturalHeight || image.height;
     const debugMode = typeof CONFIG !== "undefined" && CONFIG.debugRecognition;
 
+    // 検索テンプレートの上辺をそのまま refY として使用
     let refY = Math.floor(h * 0.18);
     const searchPos = detectSearchPosition(image);
-    if (searchPos) {
-      const foundRef = findRefY(image, searchPos.y);
-      if (foundRef != null) refY = foundRef;
-    }
+    if (searchPos) refY = searchPos.y;
 
     const zones = computeZones(refY, w, h);
     const results = [];
@@ -681,7 +673,7 @@ const Recognition = (function () {
       console.log("[画像認識] 認識完了:", results.map(function (r) { return r.name || "(未認識)"; }).join(", "));
     }
     if (debugMode && typeof window !== "undefined" && window.showRecognitionDebug) {
-      window.showRecognitionDebug(image, results, debugData, { w, h, zones, zoneRects });
+      window.showRecognitionDebug(image, results, debugData, { w, h, zones, zoneRects, searchPos });
     }
     onProgress(100);
     return results;

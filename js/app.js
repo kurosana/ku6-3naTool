@@ -469,6 +469,86 @@
         ctx.strokeRect(d.cpRect.x * scale, d.cpRect.y * scale, d.cpRect.w * scale, d.cpRect.h * scale);
       }
     });
+
+    // === 検索テンプレート検出矩形（シアン点線）と SB オフセット線（黄緑） ===
+    var searchPos = layout.searchPos;
+    if (searchPos) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,220,220,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(searchPos.x * scale, searchPos.y * scale, searchPos.w * scale, searchPos.h * scale);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(0,220,220,0.95)";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("検索", searchPos.x * scale + 2, searchPos.y * scale - 1);
+      ctx.restore();
+    }
+
+    // === refY 基準ライン（マゼンタ点線） ===
+    if (zones && zones.refY != null) {
+      var refYc = zones.refY * scale;
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,0,255,0.95)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(0, refYc); ctx.lineTo(cw, refYc); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(255,0,255,0.95)";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("refY", 2, refYc - 1);
+      ctx.restore();
+    }
+
+    // === N/M/L/K 計測矢印（右端に色分けで表示） ===
+    if (zones && zones.refY != null && zones.cp1 && zones.pokemon1 && zones.cp2) {
+      var cp1r = zones.cp1[0];
+      var pk1r = zones.pokemon1[0];
+      var cp2r = zones.cp2[0];
+      var zN = cp1r.y - zones.refY;
+      var zM = cp1r.h;
+      var zL = pk1r.h;
+      var zK = cp2r.y - (pk1r.y + pk1r.h);
+
+      var drawMeasureArrow = function (y1px, y2px, label, color) {
+        var y1c = y1px * scale;
+        var y2c = y2px * scale;
+        if (Math.abs(y2c - y1c) < 2) return;
+        var mid = (y1c + y2c) / 2;
+        var ax = cw - 10;
+        var capW = 5;
+        ctx.save();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = color;
+        // 縦線
+        ctx.beginPath(); ctx.moveTo(ax, y1c); ctx.lineTo(ax, y2c); ctx.stroke();
+        // 上下キャップ
+        ctx.beginPath();
+        ctx.moveTo(ax - capW, y1c); ctx.lineTo(ax + capW, y1c);
+        ctx.moveTo(ax - capW, y2c); ctx.lineTo(ax + capW, y2c);
+        ctx.stroke();
+        // ラベル（背景付き）
+        ctx.font = "bold 7px sans-serif";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        var tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(ax - capW - 3 - tw - 1, mid - 4.5, tw + 3, 9);
+        ctx.fillStyle = color;
+        ctx.fillText(label, ax - capW - 3, mid);
+        ctx.restore();
+      };
+
+      var ry = zones.refY;
+      if (zN > 0) drawMeasureArrow(ry,              ry + zN,       "N=" + zN + "px", "#ffa500");
+                  drawMeasureArrow(cp1r.y,           cp1r.y + zM,   "M=" + zM + "px", "#44aaff");
+                  drawMeasureArrow(pk1r.y,            pk1r.y + zL,   "L=" + zL + "px", "#ff4444");
+      if (zK > 0) drawMeasureArrow(pk1r.y + zL,     pk1r.y + zL + zK, "K=" + zK + "px", "#44dd88");
+    }
     cellsContainer.innerHTML = "";
     var threshold = (typeof CONFIG !== "undefined" && CONFIG.imageMatchThreshold) ? CONFIG.imageMatchThreshold : 0.65;
     debugData.forEach(function (d) {
