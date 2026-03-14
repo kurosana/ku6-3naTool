@@ -4,3 +4,4 @@ Trush/
 Image/Match/cutting/
 *.db
 .env
+debug.js

@@ -647,6 +647,28 @@
     return div.innerHTML;
   }
 
+  // Web Share API が使えない場合のモバイル向けフォールバック
+  // 画像をオーバーレイ表示して「長押しで保存」を案内する
+  function showImageFallback(url) {
+    const backdrop = document.createElement("div");
+    backdrop.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;";
+    const msg = document.createElement("p");
+    msg.textContent = "画像を長押し（または2本指タップ）して「写真に追加」で保存できます";
+    msg.style.cssText = "color:#fff;font-size:0.85rem;text-align:center;margin:0 0 0.75rem;line-height:1.6;";
+    const img = document.createElement("img");
+    img.src = url;
+    img.style.cssText = "max-width:100%;max-height:70vh;border-radius:8px;display:block;";
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "閉じる";
+    closeBtn.style.cssText = "margin-top:1rem;padding:0.6rem 1.5rem;border:none;border-radius:8px;background:#fff;font-size:1rem;cursor:pointer;";
+    closeBtn.onclick = () => document.body.removeChild(backdrop);
+    backdrop.onclick = (e) => { if (e.target === backdrop) document.body.removeChild(backdrop); };
+    backdrop.appendChild(msg);
+    backdrop.appendChild(img);
+    backdrop.appendChild(closeBtn);
+    document.body.appendChild(backdrop);
+  }
+
   async function outputImage() {
     saveInputs();
     showProgress();
@@ -660,26 +682,29 @@
 
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       const file = new File([blob], "teamsheet.png", { type: "image/png" });
+      const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
+      const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+      console.log("[画像出力] isMobile:", isMobile, "inIframe:", inIframe, "canWebShare:", canWebShare);
 
       // モバイル かつ Web Share API（ファイル共有）が使える場合は共有シートを開く
       let cancelled = false;
-      if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (isMobile && canWebShare) {
         try {
           await navigator.share({ files: [file], title: "チームシート" });
         } catch (e) {
+          console.log("[画像出力] share エラー:", e.name, e.message);
           if (e.name === "AbortError") {
             // ユーザーがキャンセル → 何もしない（履歴保存もスキップ）
             cancelled = true;
           } else {
-            // 技術的エラーの場合のみダウンロードフォールバック
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "teamsheet.png";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // 技術的エラー（iframe制限など）→ 画像を新規タブで開いて長押し保存を促す
+            showImageFallback(url);
           }
         }
+      } else if (isMobile) {
+        // Web Share 非対応モバイル（古いブラウザ等）→ 同上
+        console.log("[画像出力] Web Share 非対応のため画像タブ表示");
+        showImageFallback(url);
       } else {
         // PC: 新規タブ表示のみ
         const win = window.open("", "_blank");
