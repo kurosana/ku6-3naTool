@@ -107,6 +107,11 @@
   }
 
   function initEntrance() {
+    const versionEl = $("app-version");
+    if (versionEl && typeof CONFIG !== "undefined" && CONFIG.appVersion) {
+      versionEl.textContent = CONFIG.appVersion;
+    }
+
     const explanation = $("entrance-explanation");
     if (explanation && typeof CONFIG !== "undefined" && CONFIG.imageLoadExplanation) {
       explanation.textContent = CONFIG.imageLoadExplanation;

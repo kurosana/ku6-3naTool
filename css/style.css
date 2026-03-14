@@ -60,6 +60,16 @@ body {
   padding-bottom: 2rem;
 }
 
+.app-version {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--text-muted, #aaa);
+  pointer-events: none;
+  user-select: none;
+}
+
 #screen-entrance .btn-past {
   position: absolute;
   top: 1rem;

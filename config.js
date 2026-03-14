@@ -55,6 +55,9 @@ const CONFIG = {
   outputHeight: 2480,
   templatePath: "Image/Template.png",
 
+  // ========== バージョン表記 ==========
+  appVersion: "v1.1.5",
+
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※初回時のみ少し時間かかります",
   labelRecognitionHint2: "お気に入りマーク(★)で認識精度落ちます",
