@@ -215,7 +215,24 @@ const SheetRender = (function () {
     canvas.width = W;
     canvas.height = H;
     await drawSheet(state, canvas, false, onProgress);
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          // iOS Safari 等で toBlob が null を返す場合は toDataURL で代替
+          try {
+            const dataUrl = canvas.toDataURL("image/png");
+            const bin = atob(dataUrl.split(",")[1]);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            resolve(new Blob([arr], { type: "image/png" }));
+          } catch (e) {
+            reject(new Error("canvas.toBlob returned null and toDataURL fallback failed: " + e.message));
+          }
+        }
+      }, "image/png");
+    });
   }
 
   return { drawSheet, renderToBlob, layout };

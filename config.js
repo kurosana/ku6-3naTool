@@ -56,7 +56,7 @@ const CONFIG = {
   templatePath: "Image/Template.png",
 
   // ========== バージョン表記 ==========
-  appVersion: "v1.1.5",
+  appVersion: "v1.1.6",
 
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※初回時のみ少し時間かかります",

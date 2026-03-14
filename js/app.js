@@ -675,19 +675,26 @@
   function showImageFallback(url) {
     const overlay = $("overlay-save-image");
     const img = $("save-image-img");
-    if (!overlay || !img) return;
+    if (!overlay || !img) {
+      console.warn("[画像出力] overlay-save-image が見つかりません");
+      return;
+    }
     // 前回の blob URL があれば解放
     if (img.dataset.blobUrl && img.dataset.blobUrl !== url) {
       URL.revokeObjectURL(img.dataset.blobUrl);
     }
     img.src = url;
     img.dataset.blobUrl = url;
+    overlay.classList.add("active");           // .overlay は .active で表示
     overlay.setAttribute("aria-hidden", "false");
   }
 
   function closeSaveImageOverlay() {
     const overlay = $("overlay-save-image");
-    if (overlay) overlay.setAttribute("aria-hidden", "true");
+    if (overlay) {
+      overlay.classList.remove("active");
+      overlay.setAttribute("aria-hidden", "true");
+    }
   }
 
   async function outputImage() {
