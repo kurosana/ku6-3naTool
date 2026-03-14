@@ -732,10 +732,14 @@
         win.document.close();
       }
     } else if (inIframe) {
-      // iframe 内: Web Share API はブラウザにブロックされる可能性が高いため
-      // 最初から画像オーバーレイを表示して長押し保存を案内
-      console.log("[画像出力] iframe内のため画像オーバーレイ表示");
-      showImageFallback(url);
+      // iframe 内: ダウンロード
+      console.log("[画像出力] iframe内のためダウンロード");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "teamsheet.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } else if (canWebShare) {
       // モバイル直接アクセス + Web Share 対応: 共有シートを開く
       try {
