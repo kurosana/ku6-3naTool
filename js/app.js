@@ -672,49 +672,60 @@
   async function outputImage() {
     saveInputs();
     showProgress();
+
+    // ── レンダリング ──────────────────────────────────────────
+    let blob;
     try {
       await document.fonts.ready;
-      const blob = await SheetRender.renderToBlob(state, setProgress);
-      const url = URL.createObjectURL(blob);
-
-      // 出力前にダイアログを閉じる
+      blob = await SheetRender.renderToBlob(state, setProgress);
+    } catch (e) {
+      console.error("[画像出力] レンダリングエラー:", e);
       hideProgress();
+      return;
+    }
+    hideProgress();
 
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const file = new File([blob], "teamsheet.png", { type: "image/png" });
-      const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
-      const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
-      console.log("[画像出力] isMobile:", isMobile, "inIframe:", inIframe, "canWebShare:", canWebShare);
+    // ── 出力 ─────────────────────────────────────────────────
+    const url = URL.createObjectURL(blob);
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
+    const file = new File([blob], "teamsheet.png", { type: "image/png" });
+    const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+    console.log("[画像出力] isMobile:", isMobile, "inIframe:", inIframe, "canWebShare:", canWebShare);
 
-      // モバイル かつ Web Share API（ファイル共有）が使える場合は共有シートを開く
-      let cancelled = false;
-      if (isMobile && canWebShare) {
-        try {
-          await navigator.share({ files: [file], title: "チームシート" });
-        } catch (e) {
-          console.log("[画像出力] share エラー:", e.name, e.message);
-          if (e.name === "AbortError") {
-            // ユーザーがキャンセル → 何もしない（履歴保存もスキップ）
-            cancelled = true;
-          } else {
-            // 技術的エラー（iframe制限など）→ 画像を新規タブで開いて長押し保存を促す
-            showImageFallback(url);
-          }
-        }
-      } else if (isMobile) {
-        // Web Share 非対応モバイル（古いブラウザ等）→ 同上
-        console.log("[画像出力] Web Share 非対応のため画像タブ表示");
-        showImageFallback(url);
-      } else {
-        // PC: 新規タブ表示のみ
-        const win = window.open("", "_blank");
-        if (win) {
-          win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
-          win.document.close();
+    let cancelled = false;
+
+    if (!isMobile) {
+      // PC: 新規タブ表示のみ
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
+        win.document.close();
+      }
+    } else if (canWebShare) {
+      // モバイル + Web Share 対応: 共有シートを開く
+      // ※ iOS はユーザージェスチャー直後のみ share() を許可するため、
+      //   レンダリング後も有効なよう try し、失敗時は画像オーバーレイにフォールバック
+      try {
+        await navigator.share({ files: [file], title: "チームシート" });
+      } catch (e) {
+        console.log("[画像出力] share エラー:", e.name, e.message);
+        if (e.name === "AbortError") {
+          cancelled = true; // キャンセル → 何もしない
+        } else {
+          // NotAllowedError（ジェスチャー期限切れ等）も含め画像オーバーレイで代替
+          showImageFallback(url);
         }
       }
+    } else {
+      // Web Share 非対応モバイル（古いブラウザ / iframe 制限など）
+      console.log("[画像出力] Web Share 非対応のため画像オーバーレイ表示");
+      showImageFallback(url);
+    }
 
-      if (!cancelled) {
+    // ── 履歴保存（キャンセル時はスキップ）─────────────────────
+    if (!cancelled) {
+      try {
         const list = loadHistory();
         const dataUrl = await new Promise((resolve) => {
           const reader = new FileReader();
@@ -723,10 +734,9 @@
         });
         list.unshift({ dataUrl, at: Date.now() });
         saveHistory(list);
+      } catch (e) {
+        console.warn("[画像出力] 履歴保存エラー:", e);
       }
-    } catch (_) {
-    } finally {
-      hideProgress();
     }
   }
 
