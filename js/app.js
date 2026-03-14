@@ -702,10 +702,13 @@
         win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
         win.document.close();
       }
+    } else if (inIframe) {
+      // iframe 内: Web Share API はブラウザにブロックされる可能性が高いため
+      // 最初から画像オーバーレイを表示して長押し保存を案内
+      console.log("[画像出力] iframe内のため画像オーバーレイ表示");
+      showImageFallback(url);
     } else if (canWebShare) {
-      // モバイル + Web Share 対応: 共有シートを開く
-      // ※ iOS はユーザージェスチャー直後のみ share() を許可するため、
-      //   レンダリング後も有効なよう try し、失敗時は画像オーバーレイにフォールバック
+      // モバイル直接アクセス + Web Share 対応: 共有シートを開く
       try {
         await navigator.share({ files: [file], title: "チームシート" });
       } catch (e) {
@@ -718,7 +721,7 @@
         }
       }
     } else {
-      // Web Share 非対応モバイル（古いブラウザ / iframe 制限など）
+      // Web Share 非対応モバイル（古いブラウザ等）
       console.log("[画像出力] Web Share 非対応のため画像オーバーレイ表示");
       showImageFallback(url);
     }
