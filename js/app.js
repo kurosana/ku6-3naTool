@@ -658,17 +658,30 @@
       // 出力前にダイアログを閉じる
       hideProgress();
 
-      // ダウンロードリンクで保存（スマホ含む全環境対応）
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "teamsheet.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      // PCでは新規タブでも表示（スマホでは無視される or ブロックされるため無害）
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (!isMobile) {
+      const file = new File([blob], "teamsheet.png", { type: "image/png" });
+
+      // モバイル かつ Web Share API（ファイル共有）が使える場合は共有シートを開く
+      let cancelled = false;
+      if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: "チームシート" });
+        } catch (e) {
+          if (e.name === "AbortError") {
+            // ユーザーがキャンセル → 何もしない（履歴保存もスキップ）
+            cancelled = true;
+          } else {
+            // 技術的エラーの場合のみダウンロードフォールバック
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "teamsheet.png";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+        }
+      } else {
+        // PC: 新規タブ表示のみ
         const win = window.open("", "_blank");
         if (win) {
           win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
@@ -676,14 +689,16 @@
         }
       }
 
-      const list = loadHistory();
-      const dataUrl = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-      list.unshift({ dataUrl, at: Date.now() });
-      saveHistory(list);
+      if (!cancelled) {
+        const list = loadHistory();
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+        list.unshift({ dataUrl, at: Date.now() });
+        saveHistory(list);
+      }
     } catch (_) {
     } finally {
       hideProgress();
