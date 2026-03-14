@@ -18,6 +18,7 @@ const Recognition = (function () {
   let matchTemplates = []; // { dexNo, name, isShadow, isLight, path, data, mask, w, h }
   let cpTemplates = []; // { cp, data }
   let searchTemplate = null; // { data, w, h } 「検索」サンプル
+  let androidTriangleTemplate = null; // { data, w, h } Android ナビバー三角アイコン
   let templatesLoaded = false;
 
   function pathJoin(base, p) {
@@ -197,6 +198,21 @@ const Recognition = (function () {
     if (onOneLoaded) onOneLoaded();
   }
 
+  async function loadAndroidTriangleTemplate() {
+    const path = (typeof CONFIG !== "undefined" && CONFIG.recognitionAndroidTrianglePath)
+      ? CONFIG.recognitionAndroidTrianglePath
+      : "Image/Match/Android_triangle.png";
+    try {
+      const img = await loadImage(pathJoin(BASE, path));
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const data = imageToGrayData(img, w, h);
+      androidTriangleTemplate = { data, w, h };
+    } catch (_) {
+      androidTriangleTemplate = null;
+    }
+  }
+
   async function loadMatchTemplates(manifest, onOneLoaded) {
     const list = (manifest || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const pokemonList = DataService.getPokemonList();
@@ -330,6 +346,7 @@ const Recognition = (function () {
       loadSearchTemplate(onOneLoaded),
       loadMatchTemplates(manifestText, onOneLoaded),
       loadCPTemplates(onOneLoaded),
+      loadAndroidTriangleTemplate(),
     ]);
     templatesLoaded = true;
     if (typeof console !== "undefined" && console.log) {
@@ -483,11 +500,86 @@ const Recognition = (function () {
     };
   }
 
-  function computeZones(refY, imgW, imgH) {
+  /**
+   * Android ナビゲーションバー検出
+   * 画像下部20%の範囲で Android_triangle テンプレートを探す。
+   * 見つかった場合、画像最下部から連続する黒帯（#000000相当）の高さを返す。
+   * 見つからなければ 0 を返す。
+   */
+  function detectAndroidBottomBar(img) {
+    if (!androidTriangleTemplate) return 0;
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    const tw = androidTriangleTemplate.w;
+    const th = androidTriangleTemplate.h;
+    const threshold = (typeof CONFIG !== "undefined" && CONFIG.recognitionAndroidTriangleThreshold != null)
+      ? CONFIG.recognitionAndroidTriangleThreshold : 0.55;
+
+    // 下20%の範囲のみスキャン
+    const scanTop = Math.floor(ih * 0.80);
+    const scanH = ih - scanTop;
+    if (scanH < th || iw < tw) return 0;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = iw;
+    canvas.height = scanH;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, scanTop, iw, scanH, 0, 0, iw, scanH);
+    const scanData = ctx.getImageData(0, 0, iw, scanH);
+
+    let bestScore = -1;
+    const step = 2;
+    for (let y = 0; y <= scanH - th; y += step) {
+      for (let x = 0; x <= iw - tw; x += step) {
+        const slice = getGraySlice(scanData, iw, scanH, x, y, tw, th);
+        const r = correlation(slice, androidTriangleTemplate.data);
+        if (r > bestScore) bestScore = r;
+      }
+    }
+    if (bestScore < threshold) return 0;
+
+    // 黒帯の高さを算出: 最下行から上に向かって #000000 に近い行を数える
+    const fullCanvas = document.createElement("canvas");
+    fullCanvas.width = iw;
+    fullCanvas.height = ih;
+    const fullCtx = fullCanvas.getContext("2d");
+    fullCtx.drawImage(img, 0, 0);
+    const fullData = fullCtx.getImageData(0, 0, iw, ih).data;
+    const blackThreshold = 20; // RGB それぞれがこの値以下なら黒とみなす
+    let blackBarH = 0;
+    for (let row = ih - 1; row >= 0; row--) {
+      let rowIsBlack = true;
+      for (let col = 0; col < iw; col++) {
+        const idx = (row * iw + col) * 4;
+        if (fullData[idx] > blackThreshold || fullData[idx + 1] > blackThreshold || fullData[idx + 2] > blackThreshold) {
+          rowIsBlack = false;
+          break;
+        }
+      }
+      if (rowIsBlack) {
+        blackBarH++;
+      } else {
+        break;
+      }
+    }
+    return blackBarH;
+  }
+
+  function computeZones(refY, imgW, imgH, effectiveH) {
     const z = getZoneConfig();
-    // スクリーン高さに応じてゾーンパラメータを自動スケール
     const refHeight = (typeof CONFIG !== "undefined" && CONFIG.recognitionRefHeight) ? CONFIG.recognitionRefHeight : 2556;
-    const scale = imgH / refHeight;
+    const refWidth  = (typeof CONFIG !== "undefined" && CONFIG.recognitionRefWidth)  ? CONFIG.recognitionRefWidth  : 1179;
+
+    // 縦スケール: 黒帯除去後の有効高さ（effectiveH）を基準高さで割る
+    const usedH = (effectiveH != null && effectiveH > 0) ? effectiveH : imgH;
+    const scaleV = usedH / refHeight;
+
+    // 横スケール: 縦スケールを基準横幅に掛けた「想定横幅」と実際の横幅を比較
+    const expectedW = scaleV * refWidth;
+    const scaleH = imgW / expectedW;
+
+    // N/M/L/K は縦スケール × 横スケール の両方を適用
+    const scale = scaleV * scaleH;
     const n = Math.round(z.n * scale);
     const m = Math.round(z.m * scale);
     const l = Math.round(z.l * scale);
@@ -515,7 +607,7 @@ const Recognition = (function () {
     const pokemon1 = cols.map((c) => ({ x: c.left, y: pk1Top, w: c.width, h: l }));
     const cp2 = cols.map((c) => ({ x: c.left, y: cp2Top, w: c.width, h: j }));
     const pokemon2 = cols.map((c) => ({ x: c.left, y: pk2Top, w: c.width, h: l }));
-    return { refY, contentLeft, contentWidth, cp1, pokemon1, cp2, pokemon2 };
+    return { refY, contentLeft, contentWidth, cp1, pokemon1, cp2, pokemon2, scaleV, scaleH };
   }
 
   /** 指定矩形内の背景でないピクセルを囲む最小矩形を返す */
@@ -622,12 +714,19 @@ const Recognition = (function () {
     const h = image.naturalHeight || image.height;
     const debugMode = typeof CONFIG !== "undefined" && CONFIG.debugRecognition;
 
+    // Android ナビバー（黒帯）の高さを検出し、有効高さを算出
+    const androidBarH = detectAndroidBottomBar(image);
+    const effectiveH = h - androidBarH;
+    if (debugMode && androidBarH > 0) {
+      console.log("[Android補正] 黒帯高さ:", androidBarH, "px → 有効高さ:", effectiveH, "px");
+    }
+
     // 検索テンプレートの上辺をそのまま refY として使用
-    let refY = Math.floor(h * 0.18);
+    let refY = Math.floor(effectiveH * 0.18);
     const searchPos = detectSearchPosition(image);
     if (searchPos) refY = searchPos.y;
 
-    const zones = computeZones(refY, w, h);
+    const zones = computeZones(refY, w, h, effectiveH);
     const results = [];
     const debugData = [];
     const zoneRects = [];
@@ -673,7 +772,7 @@ const Recognition = (function () {
       console.log("[画像認識] 認識完了:", results.map(function (r) { return r.name || "(未認識)"; }).join(", "));
     }
     if (debugMode && typeof window !== "undefined" && window.showRecognitionDebug) {
-      window.showRecognitionDebug(image, results, debugData, { w, h, zones, zoneRects, searchPos });
+      window.showRecognitionDebug(image, results, debugData, { w, h, zones, zoneRects, searchPos, androidBarH, effectiveH });
     }
     onProgress(100);
     return results;

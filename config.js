@@ -7,7 +7,7 @@
 const CONFIG = {
   // ========== デバッグ ==========
   // 1 にすると画像認識のデバッグモードがON。読み込んだ画像の切り取り範囲・判定結果をオーバーレイで表示します。
-  debugRecognition: 0,
+  debugRecognition: 1,
 
   // ========== エントランス画面の説明文 ==========
   // 画像読み込みについての説明（「画像を読み込む」ボタンの下に表示）
@@ -25,11 +25,17 @@ const CONFIG = {
   // 基準高さ(refY)の下から: nピクセル空けてCP1, mピクセル高さCP1, lピクセル高さポケモン1, kピクセル空けてCP2。2段目も同様
   // ※ピクセル値は recognitionRefHeight のスクリーン高さを基準にした値。異なる解像度でも自動スケールされる
   recognitionZoneN: 180,
-  recognitionZoneM: 62,
-  recognitionZoneL: 210,
+  recognitionZoneM: 65,
+  recognitionZoneL: 207,
   recognitionZoneK: 155,
   // ゾーンパラメータの基準スクリーン高さ（ピクセル）。読み込み画像の高さに合わせて自動スケールされる
   recognitionRefHeight: 2556,
+  // ゾーンパラメータの基準スクリーン横幅（ピクセル）。縦スケール後の横幅と比較して横方向のスケールも計算する
+  recognitionRefWidth: 1179,
+  // Android ナビゲーションバー三角アイコンの検知テンプレートパス
+  recognitionAndroidTrianglePath: "Image/Match/Android_triangle.png",
+  // Android 三角検知時のテンプレートマッチング閾値
+  recognitionAndroidTriangleThreshold: 0.55,
   // 左右の濃い背景を除く。コンテンツ幅 = 画像幅 * contentWidthPct、左端 = 画像幅 * contentLeftPct
   recognitionContentLeftPct: 0.06,
   recognitionContentWidthPct: 0.88,
@@ -53,7 +59,7 @@ const CONFIG = {
   labelRecognitionHint: "※初回時のみ少し時間かかります",
   labelRecognitionHint2: "お気に入りマーク(★)で認識精度落ちます",
   labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材提供求）",
-  labelSheetNote2: "→色違い・お気に入りマーク・24時間以内捕獲の背景があると失敗します",
+  labelSheetNote2: "→色違い・相棒・お気に入り・24時間以内捕獲の背景あると認識不可(現状)",
   labelSheetNote3: "→認識されなかった場合は「画像認識失敗」をタッチして手動でお願いします",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",

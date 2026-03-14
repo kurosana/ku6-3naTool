@@ -514,6 +514,23 @@
       ctx.restore();
     }
 
+    // === Android 黒帯ライン（オレンジ点線） ===
+    if (layout.androidBarH > 0) {
+      var barY = (layout.h - layout.androidBarH) * scale;
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,140,0,0.95)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(cw, barY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(255,140,0,0.95)";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText("Android bar (" + layout.androidBarH + "px)", 2, barY - 1);
+      ctx.restore();
+    }
+
     // === N/M/L/K 計測矢印（右端に色分けで表示） ===
     if (zones && zones.refY != null && zones.cp1 && zones.pokemon1 && zones.cp2) {
       var cp1r = zones.cp1[0];
