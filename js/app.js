@@ -710,51 +710,25 @@
     // ── 出力 ─────────────────────────────────────────────────
     const url = URL.createObjectURL(blob);
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
-    const file = new File([blob], "teamsheet.png", { type: "image/png" });
-    const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
-    console.log("[画像出力] isMobile:", isMobile, "inIframe:", inIframe, "canWebShare:", canWebShare);
 
-    let cancelled = false;
+    // スマホ: ダウンロード / PC: 新規タブ表示
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "teamsheet.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
     if (!isMobile) {
-      // PC
-      // PC: 新規タブ表示のみ
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
         win.document.close();
       }
-    } else if (inIframe) {
-      // iframe 内: ダウンロード
-      console.log("[画像出力] iframe内のためダウンロード");
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "teamsheet.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } else if (canWebShare) {
-      // モバイル直接アクセス + Web Share 対応: 共有シートを開く
-      try {
-        await navigator.share({ files: [file], title: "チームシート" });
-      } catch (e) {
-        console.log("[画像出力] share エラー:", e.name, e.message);
-        if (e.name === "AbortError") {
-          cancelled = true; // キャンセル → 何もしない
-        } else {
-          // NotAllowedError（ジェスチャー期限切れ等）も含め画像オーバーレイで代替
-          showImageFallback(url);
-        }
-      }
-    } else {
-      // Web Share 非対応モバイル（古いブラウザ等）
-      console.log("[画像出力] Web Share 非対応のため画像オーバーレイ表示");
-      showImageFallback(url);
     }
 
-    // ── 履歴保存（キャンセル時はスキップ）─────────────────────
-    if (!cancelled) {
+    // ── 履歴保存 ─────────────────────────────────────────────
+    {
       try {
         const list = loadHistory();
         const dataUrl = await new Promise((resolve) => {
