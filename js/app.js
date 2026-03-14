@@ -232,12 +232,6 @@
     $("btn-output").onclick = outputImage;
     $("btn-preview").onclick = openPreviewOverlay;
 
-    // iframe内モバイルでは「プレビュー表示」を非表示にする
-    if (isIframeMobile()) {
-      const btnPreview = $("btn-preview");
-      if (btnPreview) btnPreview.style.display = "none";
-    }
-
     // 保存オーバーレイの閉じるボタン
     const btnCloseSave = $("btn-close-save-image");
     if (btnCloseSave) btnCloseSave.onclick = closeSaveImageOverlay;
