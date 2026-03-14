@@ -71,6 +71,18 @@
     </div>
   </div>
 
+  <!-- 画像保存オーバーレイ（iframe内モバイル用） -->
+  <div id="overlay-save-image" class="overlay" aria-hidden="true">
+    <div class="preview-overlay-backdrop" id="save-image-backdrop"></div>
+    <div class="preview-overlay-box">
+      <button type="button" class="btn-close-preview" id="btn-close-save-image" aria-label="閉じる">×</button>
+      <p class="preview-overlay-note">長押し（または2本指タップ）→「写真に追加」で保存できます</p>
+      <div class="preview-overlay-content">
+        <img id="save-image-img" src="" alt="チームシート" style="display:block;max-width:100%;height:auto;">
+      </div>
+    </div>
+  </div>
+
   <!-- 処理中オーバーレイ（画像認識など） -->
   <div id="overlay-progress" class="overlay overlay-progress" aria-hidden="true">
     <div class="progress-overlay-backdrop"></div>

@@ -226,6 +226,18 @@
     $("btn-back-sheet").onclick = () => showScreen("entrance");
     $("btn-output").onclick = outputImage;
     $("btn-preview").onclick = openPreviewOverlay;
+
+    // iframe内モバイルでは「プレビュー表示」を非表示にする
+    if (isIframeMobile()) {
+      const btnPreview = $("btn-preview");
+      if (btnPreview) btnPreview.style.display = "none";
+    }
+
+    // 保存オーバーレイの閉じるボタン
+    const btnCloseSave = $("btn-close-save-image");
+    if (btnCloseSave) btnCloseSave.onclick = closeSaveImageOverlay;
+    const saveBackdrop = $("save-image-backdrop");
+    if (saveBackdrop) saveBackdrop.onclick = closeSaveImageOverlay;
   }
 
   function renderPokemonSlots() {
@@ -647,26 +659,30 @@
     return div.innerHTML;
   }
 
-  // Web Share API が使えない場合のモバイル向けフォールバック
-  // 画像をオーバーレイ表示して「長押しで保存」を案内する
+  // iframe内モバイルかどうかを判定
+  function isIframeMobile() {
+    const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return inIframe && isMobile;
+  }
+
+  // 保存オーバーレイを開く（iframe内モバイル用: <img>タグで表示するので長押し保存可能）
   function showImageFallback(url) {
-    const backdrop = document.createElement("div");
-    backdrop.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;";
-    const msg = document.createElement("p");
-    msg.textContent = "画像を長押し（または2本指タップ）して「写真に追加」で保存できます";
-    msg.style.cssText = "color:#fff;font-size:0.85rem;text-align:center;margin:0 0 0.75rem;line-height:1.6;";
-    const img = document.createElement("img");
+    const overlay = $("overlay-save-image");
+    const img = $("save-image-img");
+    if (!overlay || !img) return;
+    // 前回の blob URL があれば解放
+    if (img.dataset.blobUrl && img.dataset.blobUrl !== url) {
+      URL.revokeObjectURL(img.dataset.blobUrl);
+    }
     img.src = url;
-    img.style.cssText = "max-width:100%;max-height:70vh;border-radius:8px;display:block;";
-    const closeBtn = document.createElement("button");
-    closeBtn.textContent = "閉じる";
-    closeBtn.style.cssText = "margin-top:1rem;padding:0.6rem 1.5rem;border:none;border-radius:8px;background:#fff;font-size:1rem;cursor:pointer;";
-    closeBtn.onclick = () => document.body.removeChild(backdrop);
-    backdrop.onclick = (e) => { if (e.target === backdrop) document.body.removeChild(backdrop); };
-    backdrop.appendChild(msg);
-    backdrop.appendChild(img);
-    backdrop.appendChild(closeBtn);
-    document.body.appendChild(backdrop);
+    img.dataset.blobUrl = url;
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function closeSaveImageOverlay() {
+    const overlay = $("overlay-save-image");
+    if (overlay) overlay.setAttribute("aria-hidden", "true");
   }
 
   async function outputImage() {
@@ -696,6 +712,7 @@
     let cancelled = false;
 
     if (!isMobile) {
+      // PC
       // PC: 新規タブ表示のみ
       const win = window.open("", "_blank");
       if (win) {
