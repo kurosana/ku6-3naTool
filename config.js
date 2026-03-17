@@ -56,7 +56,7 @@ const CONFIG = {
   templatePath: "Image/Template.png",
 
   // ========== バージョン表記 ==========
-  appVersion: "v1.1.10",
+  appVersion: "v1.2.2",
 
   // ========== 英語出力フォントサイズ ==========
   outputEngPokemonNameSize: 57,
