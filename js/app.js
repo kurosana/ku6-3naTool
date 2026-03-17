@@ -9,6 +9,7 @@
     trainerName: "teamSheet_trainerName",
     friendCode: "teamSheet_friendCode",
     history: "teamSheet_history",
+    engOutput: "teamSheet_engOutput",
   };
   const MAX_HISTORY = 5;
 
@@ -17,6 +18,7 @@
     handleName: "",
     trainerName: "",
     friendCode: "",
+    engOutput: false,
     pokemons: Array(6).fill(null).map(() => ({
       dexNo: null,
       name: null,
@@ -73,6 +75,7 @@
       state.handleName = localStorage.getItem(STORAGE_KEYS.handleName) || "";
       state.trainerName = localStorage.getItem(STORAGE_KEYS.trainerName) || "";
       state.friendCode = localStorage.getItem(STORAGE_KEYS.friendCode) || "";
+      state.engOutput = localStorage.getItem(STORAGE_KEYS.engOutput) === "1";
     } catch (_) {}
   }
 
@@ -81,6 +84,7 @@
       localStorage.setItem(STORAGE_KEYS.handleName, state.handleName);
       localStorage.setItem(STORAGE_KEYS.trainerName, state.trainerName);
       localStorage.setItem(STORAGE_KEYS.friendCode, state.friendCode);
+      localStorage.setItem(STORAGE_KEYS.engOutput, state.engOutput ? "1" : "0");
     } catch (_) {}
   }
 
@@ -773,6 +777,26 @@
     el.style.display = lines.length ? "" : "none";
   }
 
+  function updateEngToggleUI() {
+    const btn = $("toggle-eng-output");
+    if (!btn) return;
+    btn.setAttribute("aria-checked", state.engOutput ? "true" : "false");
+    const lbl = btn.querySelector(".toggle-label-text");
+    if (lbl) lbl.textContent = state.engOutput ? "ON" : "OFF";
+  }
+
+  function initEngToggle() {
+    loadSavedInputs(); // engOutput をロード
+    updateEngToggleUI();
+    const btn = $("toggle-eng-output");
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      state.engOutput = !state.engOutput;
+      updateEngToggleUI();
+      saveInputs();
+    });
+  }
+
   async function boot() {
     try {
       await DataService.loadAll();
@@ -780,6 +804,7 @@
       console.error(e);
     }
     initSheetNote();
+    initEngToggle();
     initEntrance();
     showScreen("entrance");
   }

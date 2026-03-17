@@ -58,6 +58,10 @@ const CONFIG = {
   // ========== バージョン表記 ==========
   appVersion: "v1.1.10",
 
+  // ========== 英語出力フォントサイズ ==========
+  outputEngPokemonNameSize: 57,
+  outputEngMoveNameSize: 40,
+
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※初回時のみ少し時間かかります",
   labelRecognitionHint2: "お気に入りマーク(★)で認識精度落ちます",

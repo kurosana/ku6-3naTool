@@ -17,6 +17,8 @@ const DataService = (function () {
   let moveList = [];
   let pokeMovelist = [];
   let typeMap = {};
+  let pokemonEngMap = {}; // 日本語名 → 英語名
+  let moveEngMap = {};    // 日本語名 → 英語名
   let ready = false;
 
   function parseCSV(text) {
@@ -51,11 +53,13 @@ const DataService = (function () {
 
   async function loadAll() {
     if (ready) return;
-    const [pokemonCsv, moveCsv, pokeMoveCsv, typeCsv] = await Promise.all([
+    const [pokemonCsv, moveCsv, pokeMoveCsv, typeCsv, pokeEngCsv, moveEngCsv] = await Promise.all([
       fetchText("Data/pokemon_list.csv"),
       fetchText("Data/move_list.csv"),
       fetchText("Data/poke_movelist.csv"),
       fetchText("Data/type.csv"),
+      fetchText("Data/poke_englist.csv").catch(() => ""),
+      fetchText("Data/move_englist.csv").catch(() => ""),
     ]);
 
     pokemonList = parseCSV(pokemonCsv).map((row) => ({
@@ -95,6 +99,14 @@ const DataService = (function () {
         ? CONFIG.typeIconFolder + "/" + filename
         : path;
       typeMap[typeName] = iconPath;
+    });
+
+    // 英語名マップ（1行目はヘッダー行なのでスキップ）
+    parseCSV(pokeEngCsv).slice(1).forEach((row) => {
+      if (row[0] && row[1]) pokemonEngMap[row[0].trim()] = row[1].trim();
+    });
+    parseCSV(moveEngCsv).slice(1).forEach((row) => {
+      if (row[0] && row[1]) moveEngMap[row[0].trim()] = row[1].trim();
     });
 
     ready = true;
@@ -184,6 +196,25 @@ const DataService = (function () {
   }
 
   /**
+   * ポケモン名（日本語・括弧除去済み）→ 英語名。なければ元の名前をそのまま返す
+   */
+  function getPokemonEngName(jpName) {
+    if (!jpName) return jpName;
+    return pokemonEngMap[jpName] || jpName;
+  }
+
+  /**
+   * 技名（日本語）→ 英語表示名。
+   * まず getDisplayMoveName で短縮してから英語マップを引く。
+   * "めざめるパワー〇〇" は "めざめるパワー" → "Hidden Power" として返す。
+   */
+  function getMoveEngName(moveName) {
+    if (!moveName) return moveName;
+    const disp = getDisplayMoveName(moveName); // 括弧除去・めざパ短縮
+    return moveEngMap[disp] || disp;
+  }
+
+  /**
    * 技名からタイプ名を返す（タイプアイコン表示用）
    * - "めざめるパワーほのお" → "ほのお"（move_list.csv に頼らず後ろのタイプ名を使用）
    * - 通常技 → move_list.csv のタイプ
@@ -208,6 +239,8 @@ const DataService = (function () {
     getTypeIconPath,
     getDisplayMoveName,
     getMoveTypeName,
+    getPokemonEngName,
+    getMoveEngName,
     get moveList() {
       return moveList;
     },

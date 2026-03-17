@@ -253,6 +253,67 @@ body {
   color: var(--placeholder);
 }
 
+/* ========== 英語出力トグル ========== */
+.eng-output-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: rgba(0,0,0,0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.eng-output-label {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 3.5rem;
+  height: 2rem;
+  border-radius: 1rem;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch[aria-checked="true"] {
+  background: var(--btn-primary);
+}
+.toggle-knob {
+  position: absolute;
+  left: 0.2rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: left 0.2s;
+  pointer-events: none;
+}
+.toggle-switch[aria-checked="true"] .toggle-knob {
+  left: calc(100% - 1.8rem);
+}
+.toggle-label-text {
+  position: absolute;
+  right: 0.35rem;
+  font-size: 0.6rem;
+  font-weight: bold;
+  color: #999;
+  pointer-events: none;
+  transition: right 0.2s, color 0.2s;
+}
+.toggle-switch[aria-checked="true"] .toggle-label-text {
+  right: auto;
+  left: 0.35rem;
+  color: #fff;
+}
+
 .sheet-note {
   margin: 0 0 0.75rem;
   padding: 0.5rem 0.75rem;

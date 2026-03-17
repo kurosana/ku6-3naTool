@@ -118,7 +118,11 @@ const SheetRender = (function () {
       const add = (pos) => ({ x: pos.x + off.dx, y: pos.y + off.dy });
 
       // プレビュー・出力では括弧とその中身を除いた短縮名を表示（例: サンドパン(アローラのすがた) → サンドパン）
-      const name = (pokemon.name || "").replace(/[([（【].*?[)\]）】]/g, "").trim();
+      const engOutput = !!(state.engOutput);
+      const jpName = (pokemon.name || "").replace(/[([（【].*?[)\]）】]/g, "").trim();
+      const name = (engOutput && DataService)
+        ? DataService.getPokemonEngName(jpName)
+        : jpName;
       const dexNo = pokemon.dexNo;
       const cp = pokemon.cp != null && pokemon.cp !== "" ? String(pokemon.cp) : "";
       const isShadow = !!pokemon.isShadow;
@@ -127,7 +131,10 @@ const SheetRender = (function () {
       const charge1 = pokemon.charge1 || "";
       const charge2 = pokemon.charge2 || "";
 
-      drawText(ctx, name, add(l.pokemon[0].name).x, add(l.pokemon[0].name).y, l.pokemon[0].size, l.pokemon[0].align, l.pokemon[0].baseline);
+      const pkNameSize = engOutput
+        ? ((typeof CONFIG !== "undefined" && CONFIG.outputEngPokemonNameSize) || 57)
+        : l.pokemon[0].size;
+      drawText(ctx, name, add(l.pokemon[0].name).x, add(l.pokemon[0].name).y, pkNameSize, l.pokemon[0].align, l.pokemon[0].baseline);
 
       // ① ポケモン画像
       const recognitionAttempted = !!(state.recognitionAttempted);
@@ -170,7 +177,14 @@ const SheetRender = (function () {
 
       // ③④⑤ 技タイプアイコン（常に tick することで合計を保証）
       const getMoveType = (m) => DataService ? DataService.getMoveTypeName(m) : null;
-      const dispName = (m) => DataService ? DataService.getDisplayMoveName(m) : m;
+      const dispName = (m) => {
+        if (!DataService) return m;
+        if (engOutput) return DataService.getMoveEngName(m);
+        return DataService.getDisplayMoveName(m);
+      };
+      const moveNameSize = engOutput
+        ? ((typeof CONFIG !== "undefined" && CONFIG.outputEngMoveNameSize) || 40)
+        : l.pokemon[5].size;
 
       const drawTypeIcon = async (typeName, posObj) => {
         if (!typeName || !DataService) return;
@@ -188,21 +202,21 @@ const SheetRender = (function () {
       const fastType = getMoveType(fast);
       if (fast) {
         if (fastType) await drawTypeIcon(fastType, l.pokemon[4].fastType);
-        drawText(ctx, dispName(fast), add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, l.pokemon[5].size, l.pokemon[5].align, l.pokemon[5].baseline);
+        drawText(ctx, dispName(fast), add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, moveNameSize, l.pokemon[5].align, l.pokemon[5].baseline);
       }
       tick(); // ③完了
 
       const charge1Type = getMoveType(charge1);
       if (charge1) {
         if (charge1Type) await drawTypeIcon(charge1Type, l.pokemon[6].charge1Type);
-        drawText(ctx, dispName(charge1), add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, l.pokemon[7].size, l.pokemon[7].align, l.pokemon[7].baseline);
+        drawText(ctx, dispName(charge1), add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, moveNameSize, l.pokemon[7].align, l.pokemon[7].baseline);
       }
       tick(); // ④完了
 
       const charge2Type = getMoveType(charge2);
       if (charge2) {
         if (charge2Type) await drawTypeIcon(charge2Type, l.pokemon[8].charge2Type);
-        drawText(ctx, dispName(charge2), add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, l.pokemon[9].size, l.pokemon[9].align, l.pokemon[9].baseline);
+        drawText(ctx, dispName(charge2), add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, moveNameSize, l.pokemon[9].align, l.pokemon[9].baseline);
       }
       tick(); // ⑤完了
     }
