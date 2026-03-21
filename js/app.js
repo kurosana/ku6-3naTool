@@ -260,8 +260,8 @@
         return (pm && pm.picPath) ? basePath.replace(/\/?$/, "/") + pm.picPath : "";
       })() : "";
       const picOrPlaceholder = p.dexNo
-        ? (picSrc ? `<img class="slot-pokemon-img" src="${picSrc}" alt="" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img" src="${basePath}Image/Pic/Question_Mark.png" alt="">`)
-        : (showQuestionMark ? `<img class="slot-pokemon-img" src="${basePath}Image/Pic/Question_Mark.png" alt="">` : "");
+        ? (picSrc ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${picSrc}" alt="" data-slot="${i}" data-field="img" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`)
+        : (showQuestionMark ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">` : "");
       const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [] };
       const fastOpts = (moves.fast || []).map((m) => `<option value="${escapeHtml(m)}" ${m === p.fast ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
       const chargeList = moves.charge || [];
@@ -293,13 +293,16 @@
       const btn = el.getAttribute("data-btn");
       const move = el.getAttribute("data-move");
 
-      if (field === "name") {
+      if (field === "name" || field === "img") {
         el.addEventListener("click", () => openSearchOverlay(slotIndex));
         el.addEventListener("touchstart", (e) => { searchTouchStartY = e.touches[0].clientY; }, { passive: true });
         el.addEventListener("touchend", (e) => {
           const dy = Math.abs(e.changedTouches[0].clientY - searchTouchStartY);
-          if (dy < 10) openSearchOverlay(slotIndex);
-        }, { passive: true });
+          if (dy < 10) {
+            e.preventDefault(); // Androidのゴーストクリック防止
+            openSearchOverlay(slotIndex);
+          }
+        }, { passive: false });
       } else if (field === "cp") {
         el.addEventListener("input", () => {
           el.value = el.value.replace(/\D/g, "");

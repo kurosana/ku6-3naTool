@@ -389,6 +389,12 @@ body {
   margin: 0 auto 0.35rem;
   position: relative;
 }
+.pokemon-slot .slot-pokemon-img--clickable {
+  cursor: pointer;
+}
+.pokemon-slot .slot-pokemon-img--clickable:hover {
+  opacity: 0.75;
+}
 .pokemon-slot .slot-cp {
   font-size: 0.85rem;
   margin-bottom: 0.25rem;
