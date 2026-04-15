@@ -56,14 +56,14 @@ const CONFIG = {
   templatePath: "Image/Template.png",
 
   // ========== バージョン表記 ==========
-  appVersion: "v1.3.1",
+  appVersion: "v1.3.2",
 
   // ========== 英語出力フォントサイズ ==========
   outputEngPokemonNameSize: 57,
   outputEngMoveNameSize: 40,
 
   // ========== 表示用ラベル（必要なら変更可） ==========
-  labelRecognitionHint: "※初回時のみ少し時間かかります",
+  labelRecognitionHint: "※キャッシュがないと少し時間かかります",
   labelRecognitionHint2: "お気に入りマーク(★)で認識精度落ちます",
   labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材提供求）",
   labelSheetNote2: "→色違い・相棒・お気に入り・24時間以内捕獲の背景あると認識不可(現状)",
