@@ -19,6 +19,8 @@ const DataService = (function () {
   let typeMap = {};
   let pokemonEngMap = {}; // 日本語名 → 英語名
   let moveEngMap = {};    // 日本語名 → 英語名
+  let pokemonEngToJpMap = {}; // 英語名（lower） → 日本語名
+  let moveEngToJpMap = {};    // 正規化トークン（FEINT_ATTACK） → 日本語名
   let ready = false;
 
   function parseCSV(text) {
@@ -103,13 +105,36 @@ const DataService = (function () {
 
     // 英語名マップ（1行目はヘッダー行なのでスキップ）
     parseCSV(pokeEngCsv).slice(1).forEach((row) => {
-      if (row[0] && row[1]) pokemonEngMap[row[0].trim()] = row[1].trim();
+      if (row[0] && row[1]) {
+        const jp = row[0].trim();
+        const en = row[1].trim();
+        pokemonEngMap[jp] = en;
+        pokemonEngToJpMap[en.toLowerCase()] = jp;
+      }
     });
     parseCSV(moveEngCsv).slice(1).forEach((row) => {
-      if (row[0] && row[1]) moveEngMap[row[0].trim()] = row[1].trim();
+      if (row[0] && row[1]) {
+        const jp = row[0].trim();
+        const en = row[1].trim();
+        moveEngMap[jp] = en;
+        const token = normalizeMoveToken(en);
+        if (token) moveEngToJpMap[token] = jp;
+      }
     });
 
     ready = true;
+  }
+
+  // 英語技名 → "FEINT_ATTACK" 形式トークン化
+  // 大文字化 → 空白/ハイフンを _ に → 英数字とアンダースコア以外を除去
+  function normalizeMoveToken(engName) {
+    if (!engName) return "";
+    return String(engName)
+      .toUpperCase()
+      .replace(/[\s\-]+/g, "_")
+      .replace(/[^A-Z0-9_]/g, "")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
   }
 
   function getPokemonList() {
@@ -215,6 +240,52 @@ const DataService = (function () {
   }
 
   /**
+   * 英語の種族名（speciesName）から日本語名のポケモンオブジェクトを返す。
+   * 大文字小文字は無視。見つからなければ null。
+   */
+  function getPokemonByEngName(engName) {
+    if (!engName) return null;
+    const jp = pokemonEngToJpMap[String(engName).trim().toLowerCase()];
+    if (!jp) return null;
+    return pokemonList.find((p) => p.name === jp) || null;
+  }
+
+  /**
+   * 日本語技名 → JSON 用トークン（"FEINT_ATTACK" 形式）。
+   * 英語名が未登録なら空文字を返す。
+   */
+  function formatMoveForJson(jpName) {
+    if (!jpName) return "";
+    const eng = getMoveEngName(jpName);
+    return normalizeMoveToken(eng);
+  }
+
+  /**
+   * JSON 内の技トークン（"FEINT_ATTACK"）→ 日本語技名。
+   * dexNo を渡された場合、そのポケモンが覚える技に絞って一致するものを優先する。
+   * 見つからなければ空文字を返す。
+   */
+  function parseJsonMoveName(token, dexNo) {
+    if (!token) return "";
+    const norm = normalizeMoveToken(token);
+    if (!norm) return "";
+    const jp = moveEngToJpMap[norm];
+    if (!jp) return "";
+    if (dexNo) {
+      const moves = getMovesForPokemon(dexNo);
+      const all = (moves.fast || []).concat(moves.charge || []);
+      // 「めざめるパワー〇〇」のように同一英語名で複数ある場合は当該ポケモンが覚えるものを優先
+      if (jp === "めざめるパワー") {
+        const owned = all.find((m) => /^めざめるパワー/.test(m));
+        if (owned) return owned;
+      }
+      if (all.indexOf(jp) >= 0) return jp;
+      return "";
+    }
+    return jp;
+  }
+
+  /**
    * 技名からタイプ名を返す（タイプアイコン表示用）
    * - "めざめるパワーほのお" → "ほのお"（move_list.csv に頼らず後ろのタイプ名を使用）
    * - 通常技 → move_list.csv のタイプ
@@ -241,6 +312,9 @@ const DataService = (function () {
     getMoveTypeName,
     getPokemonEngName,
     getMoveEngName,
+    getPokemonByEngName,
+    formatMoveForJson,
+    parseJsonMoveName,
     get moveList() {
       return moveList;
     },

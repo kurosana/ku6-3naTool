@@ -13,10 +13,11 @@
     <!-- エントランス画面 -->
     <section id="screen-entrance" class="screen active">
       <span class="app-version" id="app-version"></span>
-      <button type="button" class="btn-past" id="btn-past">過去の画像</button>
+      <button type="button" class="btn-past" id="btn-past">過去パーティ呼び出し</button>
       <div class="entrance-main">
         <button type="button" class="btn-load-image" id="btn-load-image">画像を読み込む</button>
         <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
+        <button type="button" class="btn-start-without" id="btn-load-json">jsonを読み込んで開始</button>
       </div>
       <p class="explanation" id="entrance-explanation"></p>
       <input type="file" id="input-image" accept="image/*" hidden>
@@ -55,6 +56,9 @@
           </div>
           <div class="pokemon-slots" id="pokemon-slots">
             <!-- 6スロットは JS で生成 -->
+          </div>
+          <div class="json-copy-row">
+            <button type="button" class="btn-copy-json" id="btn-copy-json">jsonコピー</button>
           </div>
         </div>
       </div>
@@ -116,6 +120,16 @@
         <canvas id="debug-canvas-full"></canvas>
         <div class="debug-cells" id="debug-cells"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- JSON読み込みエラーオーバーレイ -->
+  <div id="overlay-json-error" class="overlay overlay-json-error" aria-hidden="true">
+    <div class="json-error-backdrop"></div>
+    <div class="json-error-box">
+      <p class="json-error-title">jsonを読み込めませんでした</p>
+      <p class="json-error-message" id="json-error-message">クリップボードに有効なパーティjsonが見つかりません。</p>
+      <button type="button" class="btn-json-error-ok" id="btn-json-error-ok">OK</button>
     </div>
   </div>
 

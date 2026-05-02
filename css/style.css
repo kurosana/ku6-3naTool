@@ -520,11 +520,120 @@ body {
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.history-item .history-date {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-edit-party {
+  flex-shrink: 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--btn-secondary);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-edit-party:hover:not(:disabled) {
+  background: var(--btn-secondary-hover);
+}
+.btn-edit-party:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
 }
 .history-empty {
   text-align: center;
   color: var(--text-muted);
   padding: 2rem 1rem;
+}
+
+/* ========== JSON コピーボタン（シート画面） ========== */
+.json-copy-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.btn-copy-json {
+  padding: 0.6rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: bold;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--btn-secondary);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.btn-copy-json:hover {
+  background: var(--btn-secondary-hover);
+}
+.btn-copy-json.copied {
+  background: var(--btn-primary);
+  color: #fff;
+  border-color: var(--btn-primary);
+}
+.btn-copy-json.copy-failed {
+  background: #fecaca;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+/* ========== JSON 読み込みエラーオーバーレイ ========== */
+.overlay-json-error {
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.overlay-json-error .json-error-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+.overlay-json-error .json-error-box {
+  position: relative;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  padding: 1.5rem 1.5rem 1.25rem;
+  max-width: min(90vw, 360px);
+  text-align: center;
+}
+.overlay-json-error .json-error-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--text);
+}
+.overlay-json-error .json-error-message {
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.overlay-json-error .btn-json-error-ok {
+  padding: 0.55rem 2.5rem;
+  font-size: 0.95rem;
+  font-weight: bold;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--btn-primary);
+  color: #fff;
+  cursor: pointer;
+}
+.overlay-json-error .btn-json-error-ok:hover {
+  background: var(--btn-primary-hover);
 }
 
 /* ========== 検索オーバーレイ ========== */

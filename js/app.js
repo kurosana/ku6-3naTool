@@ -128,6 +128,37 @@
       showScreen("history");
     });
 
+    const btnLoadJson = $("btn-load-json");
+    if (btnLoadJson) {
+      btnLoadJson.addEventListener("click", async () => {
+        try {
+          const json = await readJsonFromClipboard();
+          openSheetWithJson(json);
+        } catch (err) {
+          let msg = "クリップボードに有効なパーティjsonが見つかりません。";
+          if (err && err.message === "clipboard_unavailable") {
+            msg = "このブラウザではクリップボードを読み取れません。https環境でお試しください。";
+          } else if (err && err.message === "invalid_json") {
+            msg = "クリップボードのデータがjson形式ではありません。";
+          } else if (err && err.message === "invalid_format") {
+            msg = "パーティjsonの形式が正しくありません。";
+          } else if (err && err.message === "empty") {
+            msg = "クリップボードが空です。";
+          }
+          showJsonErrorOverlay(msg);
+        }
+      });
+    }
+
+    const btnJsonErrorOk = $("btn-json-error-ok");
+    if (btnJsonErrorOk) btnJsonErrorOk.addEventListener("click", hideJsonErrorOverlay);
+    const overlayJsonError = $("overlay-json-error");
+    if (overlayJsonError) {
+      overlayJsonError.addEventListener("click", (e) => {
+        if (e.target.classList.contains("json-error-backdrop")) hideJsonErrorOverlay();
+      });
+    }
+
     $("input-image").addEventListener("change", async (e) => {
       const file = e.target && e.target.files[0];
       e.target.value = "";
@@ -241,6 +272,21 @@
     if (btnCloseSave) btnCloseSave.onclick = closeSaveImageOverlay;
     const saveBackdrop = $("save-image-backdrop");
     if (saveBackdrop) saveBackdrop.onclick = closeSaveImageOverlay;
+
+    // jsonコピーボタン
+    const btnCopyJson = $("btn-copy-json");
+    if (btnCopyJson) {
+      btnCopyJson.onclick = async () => {
+        const ok = await copyJsonToClipboard();
+        const orig = btnCopyJson.textContent;
+        btnCopyJson.textContent = ok ? "コピーしました" : "コピー失敗";
+        btnCopyJson.classList.add(ok ? "copied" : "copy-failed");
+        setTimeout(() => {
+          btnCopyJson.textContent = orig;
+          btnCopyJson.classList.remove("copied", "copy-failed");
+        }, 2000);
+      };
+    }
   }
 
   function renderPokemonSlots() {
@@ -665,6 +711,176 @@
     return div.innerHTML;
   }
 
+  // ─── JSON 入出力 ────────────────────────────────────────────────
+  function buildPartyJson(curState) {
+    const pokemons = curState.pokemons.map((p) => {
+      if (!p || !p.dexNo) return null;
+      const pm = DataService ? DataService.getPokemonByDexNo(p.dexNo) : null;
+      const speciesName = pm ? DataService.getPokemonEngName(pm.name) : "";
+      // dex は数値のみなら Number、フォーム違いの "38-1" 等は文字列のまま
+      const dexRaw = String(p.dexNo);
+      const dex = /^\d+$/.test(dexRaw) ? Number(dexRaw) : dexRaw;
+      const cpNum = parseInt(p.cp, 10);
+      return {
+        dex,
+        speciesName,
+        CP: Number.isFinite(cpNum) ? cpNum : null,
+        shadow: !!p.isShadow,
+        light: !!p.isLight,
+        fastMoves: p.fast && DataService ? [DataService.formatMoveForJson(p.fast)].filter(Boolean) : [],
+        chargedMoves1: p.charge1 && DataService ? [DataService.formatMoveForJson(p.charge1)].filter(Boolean) : [],
+        chargedMoves2: p.charge2 && DataService ? [DataService.formatMoveForJson(p.charge2)].filter(Boolean) : [],
+      };
+    });
+    return {
+      trainerName: curState.handleName || "",
+      trainerId: curState.trainerName || "",
+      friendCode: curState.friendCode || "",
+      pokemons,
+    };
+  }
+
+  function isValidPartyJson(json) {
+    if (!json || typeof json !== "object") return false;
+    if (!Array.isArray(json.pokemons)) return false;
+    return true;
+  }
+
+  function applyPartyJson(json) {
+    if (!isValidPartyJson(json)) return false;
+    state.handleName = typeof json.trainerName === "string" ? json.trainerName : "";
+    state.trainerName = typeof json.trainerId === "string" ? json.trainerId : "";
+    state.friendCode = typeof json.friendCode === "string"
+      ? String(json.friendCode).replace(/\D/g, "")
+      : "";
+
+    state.recognitionAttempted = false;
+
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const src = json.pokemons[i];
+      const slot = {
+        dexNo: null,
+        name: null,
+        cp: "",
+        isShadow: false,
+        isLight: false,
+        fast: "",
+        charge1: "",
+        charge2: "",
+      };
+      if (src && typeof src === "object") {
+        let pm = null;
+        if (src.dex != null) {
+          pm = DataService ? DataService.getPokemonByDexNo(String(src.dex)) : null;
+        }
+        if (!pm && src.speciesName) {
+          pm = DataService ? DataService.getPokemonByEngName(src.speciesName) : null;
+        }
+        if (pm) {
+          slot.dexNo = pm.dexNo;
+          slot.name = pm.name;
+          if (src.CP != null && src.CP !== "") {
+            const n = parseInt(src.CP, 10);
+            if (Number.isFinite(n)) slot.cp = String(n);
+          }
+          slot.isShadow = !!src.shadow;
+          slot.isLight = !!src.light;
+          if (slot.isShadow && slot.isLight) slot.isLight = false;
+
+          const pickToken = (v) => {
+            if (Array.isArray(v)) return v[0] || "";
+            if (typeof v === "string") return v;
+            return "";
+          };
+          const fastToken = pickToken(src.fastMoves);
+          const c1Token = pickToken(src.chargedMoves1);
+          const c2Token = pickToken(src.chargedMoves2);
+
+          const fastJp = fastToken && DataService ? DataService.parseJsonMoveName(fastToken, slot.dexNo) : "";
+          const c1Jp = c1Token && DataService ? DataService.parseJsonMoveName(c1Token, slot.dexNo) : "";
+          const c2Jp = c2Token && DataService ? DataService.parseJsonMoveName(c2Token, slot.dexNo) : "";
+
+          // 技が指定されていない/見つからない場合はデフォルト技を補完
+          const def = DataService ? DataService.getDefaultMoves(pm) : { fast: "", charge1: "", charge2: "" };
+          slot.fast = fastJp || def.fast || "";
+          slot.charge1 = c1Jp || def.charge1 || "";
+          slot.charge2 = c2Jp || def.charge2 || "";
+        }
+      }
+      slots.push(slot);
+    }
+    state.pokemons = slots;
+    return true;
+  }
+
+  async function copyJsonToClipboard() {
+    const obj = buildPartyJson(state);
+    const text = JSON.stringify(obj, null, 2);
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (_) { ok = false; }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch (_) { ok = false; }
+    }
+    return ok;
+  }
+
+  async function readJsonFromClipboard() {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      throw new Error("clipboard_unavailable");
+    }
+    const text = await navigator.clipboard.readText();
+    if (!text || !text.trim()) throw new Error("empty");
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (_) {
+      throw new Error("invalid_json");
+    }
+    if (!isValidPartyJson(parsed)) throw new Error("invalid_format");
+    return parsed;
+  }
+
+  function showJsonErrorOverlay(message) {
+    const overlay = $("overlay-json-error");
+    if (!overlay) return;
+    const msg = $("json-error-message");
+    if (msg && message) msg.textContent = message;
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function hideJsonErrorOverlay() {
+    const overlay = $("overlay-json-error");
+    if (overlay) {
+      overlay.classList.remove("active");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function openSheetWithJson(json) {
+    loadSavedInputs();
+    applyPartyJson(json);
+    bindSheetForm();
+    renderPokemonSlots();
+    showScreen("sheet");
+  }
+  // ───────────────────────────────────────────────────────────────
+
   // iframe内モバイルかどうかを判定
   function isIframeMobile() {
     const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
@@ -743,7 +959,7 @@
           reader.onload = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
-        list.unshift({ dataUrl, at: Date.now() });
+        list.unshift({ dataUrl, at: Date.now(), json: buildPartyJson(state) });
         saveHistory(list);
       } catch (e) {
         console.warn("[画像出力] 履歴保存エラー:", e);
@@ -759,11 +975,32 @@
       container.innerHTML = '<p class="history-empty">保存された画像はありません</p>';
       return;
     }
-    container.innerHTML = list.map((item, i) => `
+    container.innerHTML = list.map((item, i) => {
+      const dateText = new Date(item.at).toLocaleString("ja-JP");
+      const hasJson = item && item.json && Array.isArray(item.json.pokemons);
+      const btn = hasJson
+        ? `<button type="button" class="btn-edit-party" data-history-index="${i}">このパーティを編集</button>`
+        : `<button type="button" class="btn-edit-party" disabled>過去バージョン画像</button>`;
+      return `
       <div class="history-item">
         <img src="${item.dataUrl}" alt="過去のシート ${i + 1}">
-        <div class="history-meta">${new Date(item.at).toLocaleString("ja-JP")}</div>
-      </div>`).join("");
+        <div class="history-meta">
+          <span class="history-date">${dateText}</span>
+          ${btn}
+        </div>
+      </div>`;
+    }).join("");
+
+    container.querySelectorAll(".btn-edit-party[data-history-index]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-history-index"), 10);
+        const items = loadHistory();
+        const target = items[idx];
+        if (target && target.json) {
+          openSheetWithJson(target.json);
+        }
+      });
+    });
   }
 
   $("btn-back-history").addEventListener("click", () => showScreen("entrance"));
