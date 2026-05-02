@@ -16,11 +16,17 @@
         <span class="app-version" id="app-version"></span>
         <span class="app-version app-release-notes" id="app-release-notes" hidden></span>
       </div>
-      <button type="button" class="btn-past" id="btn-past">過去パーティ呼び出し</button>
       <div class="entrance-main">
-        <button type="button" class="btn-load-image" id="btn-load-image">画像を読み込む</button>
-        <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
-        <button type="button" class="btn-start-without" id="btn-load-json">jsonを読み込んで開始</button>
+        <div class="entrance-centered-block">
+          <div class="entrance-past-row">
+            <button type="button" class="btn-past" id="btn-past">過去パーティ呼び出し</button>
+          </div>
+          <div class="entrance-stack">
+            <button type="button" class="btn-load-image" id="btn-load-image">画像を読み込む</button>
+            <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
+            <button type="button" class="btn-start-without" id="btn-load-json">jsonを読み込んで開始</button>
+          </div>
+        </div>
       </div>
       <p class="explanation" id="entrance-explanation"></p>
       <input type="file" id="input-image" accept="image/*" hidden>

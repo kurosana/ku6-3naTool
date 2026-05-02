@@ -81,9 +81,6 @@ body {
 }
 
 #screen-entrance .btn-past {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   border-radius: var(--radius-sm);
@@ -103,6 +100,28 @@ body {
   align-items: center;
   justify-content: center;
   padding: 1rem;
+}
+
+/* メインボタン列と同じ幅にそろえ、「過去パーティ呼び出し」の右辺＝「画像を読み込む」の右辺に揃える */
+.entrance-centered-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(90vw, 320px);
+  max-width: 100%;
+  gap: 0.5rem;
+}
+
+.entrance-past-row {
+  display: flex;
+  justify-content: flex-end;
+  box-sizing: border-box;
+}
+
+.entrance-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 1.5rem;
 }
 
