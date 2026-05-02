@@ -11,7 +11,7 @@
     history: "teamSheet_history",
     engOutput: "teamSheet_engOutput",
   };
-  const MAX_HISTORY = 5;
+  const MAX_HISTORY = 3;
 
   let state = {
     recognitionAttempted: false,
@@ -63,6 +63,8 @@
   let currentSearchSlotIndex = null;
   let searchTouchStartY = 0;
   let searchTouchStartX = 0;
+  /** 履歴画面「このパーティを編集」から開いた場合のみ、上書き対象の配列インデックス。それ以外は null */
+  let historyReplaceSlotIndex = null;
 
   function showScreen(name) {
     Object.keys(screens).forEach((k) => {
@@ -102,7 +104,11 @@
   function saveHistory(list) {
     try {
       localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(list.slice(0, MAX_HISTORY)));
-    } catch (_) {}
+      return true;
+    } catch (e) {
+      console.error("[履歴] saveHistory failed:", e && e.name, e && e.message, e);
+      return false;
+    }
   }
 
   function setPlaceholder(el, key) {
@@ -114,6 +120,18 @@
     const versionEl = $("app-version");
     if (versionEl && typeof CONFIG !== "undefined" && CONFIG.appVersion) {
       versionEl.textContent = CONFIG.appVersion;
+    }
+
+    const releaseNotesEl = $("app-release-notes");
+    if (releaseNotesEl && typeof CONFIG !== "undefined") {
+      const notes = typeof CONFIG.appReleaseNotes === "string" ? CONFIG.appReleaseNotes : "";
+      if (notes.trim() === "") {
+        releaseNotesEl.setAttribute("hidden", "");
+        releaseNotesEl.textContent = "";
+      } else {
+        releaseNotesEl.removeAttribute("hidden");
+        releaseNotesEl.textContent = notes;
+      }
     }
 
     const explanation = $("entrance-explanation");
@@ -197,6 +215,7 @@
   }
 
   function openSheetWithRecognitionResult(result) {
+    historyReplaceSlotIndex = null;
     loadSavedInputs();
     state.handleName = state.handleName || "";
     state.trainerName = state.trainerName || "";
@@ -263,7 +282,10 @@
       };
     }
 
-    $("btn-back-sheet").onclick = () => showScreen("entrance");
+    $("btn-back-sheet").onclick = () => {
+      historyReplaceSlotIndex = null;
+      showScreen("entrance");
+    };
     $("btn-output").onclick = outputImage;
     $("btn-preview").onclick = openPreviewOverlay;
 
@@ -872,7 +894,12 @@
     }
   }
 
-  function openSheetWithJson(json) {
+  function openSheetWithJson(json, replaceHistoryIndex) {
+    if (typeof replaceHistoryIndex === "number" && replaceHistoryIndex >= 0) {
+      historyReplaceSlotIndex = replaceHistoryIndex;
+    } else {
+      historyReplaceSlotIndex = null;
+    }
     loadSavedInputs();
     applyPartyJson(json);
     bindSheetForm();
@@ -959,8 +986,20 @@
           reader.onload = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
-        list.unshift({ dataUrl, at: Date.now(), json: buildPartyJson(state) });
-        saveHistory(list);
+        const entry = { dataUrl, at: Date.now(), json: buildPartyJson(state) };
+        const slot = historyReplaceSlotIndex;
+        if (
+          slot !== null &&
+          typeof slot === "number" &&
+          slot >= 0 &&
+          slot < list.length
+        ) {
+          list[slot] = entry;
+        } else {
+          list.unshift(entry);
+        }
+        const saved = saveHistory(list);
+        if (saved) historyReplaceSlotIndex = null;
       } catch (e) {
         console.warn("[画像出力] 履歴保存エラー:", e);
       }
@@ -997,7 +1036,7 @@
         const items = loadHistory();
         const target = items[idx];
         if (target && target.json) {
-          openSheetWithJson(target.json);
+          openSheetWithJson(target.json, idx);
         }
       });
     });
