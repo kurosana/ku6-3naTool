@@ -213,6 +213,39 @@ const Recognition = (function () {
     }
   }
 
+  function getTemplateLoadConcurrency() {
+    const n = (typeof CONFIG !== "undefined" && CONFIG.recognitionTemplateLoadConcurrency != null)
+      ? CONFIG.recognitionTemplateLoadConcurrency
+      : 12;
+    return Math.max(1, Math.floor(n));
+  }
+
+  /** 同時実行数制限付きでジョブ配列を並列実行 */
+  async function runWithConcurrencyLimit(jobs, concurrency, onJobDone) {
+    if (!jobs.length) return [];
+    const limit = Math.max(1, concurrency);
+    const results = new Array(jobs.length);
+    let nextIndex = 0;
+    async function worker() {
+      while (true) {
+        const i = nextIndex++;
+        if (i >= jobs.length) break;
+        try {
+          results[i] = await jobs[i]();
+        } catch (_) {
+          results[i] = null;
+        }
+        if (onJobDone) onJobDone();
+      }
+    }
+    const workers = [];
+    for (let w = 0; w < Math.min(limit, jobs.length); w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    return results;
+  }
+
   async function loadMatchTemplates(manifest, onOneLoaded) {
     const list = (manifest || "").split(/\n/).map((s) => s.trim()).filter(Boolean);
     const pokemonList = DataService.getPokemonList();
@@ -221,20 +254,18 @@ const Recognition = (function () {
       const key = (p.matchPath || "").split("/").pop();
       if (key && !byPath[key]) byPath[key] = p;
     });
-    const loaded = [];
     const ignoreBg = (typeof CONFIG !== "undefined" && CONFIG.recognitionIgnoreBackground);
+    const jobs = [];
+
     for (const line of list) {
       const raw = (line || "").trim();
-      // "Normal/71.png" や "Shadow/71_S.png" 形式、または旧来の "71.png" 形式に対応
       const entry = raw.includes(",") ? raw.replace(/^\s*\d+,\s*/, "").trim() : raw;
       if (!entry || !/\.png$/i.test(entry)) continue;
 
-      // サブフォルダ（Normal / Shadow）を抽出
       const slashIdx = entry.indexOf("/");
       const subfolder = slashIdx >= 0 ? entry.slice(0, slashIdx) : "";
       const filename = slashIdx >= 0 ? entry.slice(slashIdx + 1) : entry;
 
-      // シャドウ/ライト判定: フォルダ名 > ファイル名サフィックス の優先度
       let isShadow = false;
       let isLight = false;
       if (/^shadow$/i.test(subfolder)) {
@@ -249,71 +280,74 @@ const Recognition = (function () {
 
       const base = filename.replace(/\.png$/i, "");
       const normalizedDex = normalizeDexFromFilename(filename);
-      // パスを組み立て: サブフォルダがあれば "Image/Match/Normal/71.png" 形式、なければ旧来の形式
       const path = subfolder
         ? "Image/Match/" + subfolder + "/" + encodeURIComponent(filename)
         : "Image/Match/" + encodeURIComponent(filename);
-      try {
-        const img = await loadImage(path);
-        const tw = img.naturalWidth || img.width;
-        const th = img.naturalHeight || img.height;
-        let data, mask;
-        if (ignoreBg) {
-          const gm = imageToGrayDataAndMask(img, tw, th);
-          data = gm.gray;
-          mask = gm.mask;
-        } else {
-          data = imageToGrayData(img, tw, th);
-          mask = null;
+
+      jobs.push(async () => {
+        try {
+          const img = await loadImage(path);
+          const tw = img.naturalWidth || img.width;
+          const th = img.naturalHeight || img.height;
+          let data, mask;
+          if (ignoreBg) {
+            const gm = imageToGrayDataAndMask(img, tw, th);
+            data = gm.gray;
+            mask = gm.mask;
+          } else {
+            data = imageToGrayData(img, tw, th);
+            mask = null;
+          }
+          const pokemon = byPath[filename] || DataService.getPokemonByDexNo(normalizedDex) || DataService.getPokemonByDexNo(base);
+          return {
+            dexNo: (pokemon && pokemon.dexNo) || normalizedDex,
+            name: (pokemon && pokemon.name) || normalizedDex,
+            isShadow,
+            isLight,
+            path,
+            data,
+            mask,
+            w: tw,
+            h: th,
+          };
+        } catch (_) {
+          return null;
         }
-        const pokemon = byPath[filename] || DataService.getPokemonByDexNo(normalizedDex) || DataService.getPokemonByDexNo(base);
-        loaded.push({
-          dexNo: (pokemon && pokemon.dexNo) || normalizedDex,
-          name: (pokemon && pokemon.name) || normalizedDex,
-          isShadow,
-          isLight,
-          path,
-          data,
-          mask,
-          w: tw,
-          h: th,
-        });
-      } catch (_) {
-        /* skip */
-      }
-      if (onOneLoaded) onOneLoaded();
+      });
     }
-    matchTemplates = loaded;
+
+    const results = await runWithConcurrencyLimit(jobs, getTemplateLoadConcurrency(), onOneLoaded);
+    matchTemplates = results.filter(Boolean);
   }
 
   async function loadCPTemplates(onOneLoaded) {
     const size = 24;
-    const loaded = [];
+    const jobs = [];
     for (let cp = 1500; cp >= 1480; cp--) {
-      try {
-        const img = await loadImage("Image/CPMatch/" + cp + ".png");
-        // 透明背景を白で合成してからグレースケール変換する
-        // (透明のままだと canvas が黒になり相関が崩れる)
-        const c = document.createElement("canvas");
-        c.width = size;
-        c.height = size;
-        const ctx = c.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(img, 0, 0, size, size);
-        const id = ctx.getImageData(0, 0, size, size);
-        const d = id.data;
-        const gray = [];
-        for (let i = 0; i < d.length; i += 4) {
-          gray.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      jobs.push(async () => {
+        try {
+          const img = await loadImage("Image/CPMatch/" + cp + ".png");
+          const c = document.createElement("canvas");
+          c.width = size;
+          c.height = size;
+          const ctx = c.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          const id = ctx.getImageData(0, 0, size, size);
+          const d = id.data;
+          const gray = [];
+          for (let i = 0; i < d.length; i += 4) {
+            gray.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+          }
+          return { cp, data: gray };
+        } catch (_) {
+          return null;
         }
-        loaded.push({ cp, data: gray });
-      } catch (_) {
-        /* skip */
-      }
-      if (onOneLoaded) onOneLoaded();
+      });
     }
-    cpTemplates = loaded;
+    const results = await runWithConcurrencyLimit(jobs, getTemplateLoadConcurrency(), onOneLoaded);
+    cpTemplates = results.filter(Boolean);
   }
 
   async function ensureTemplates(onLoadProgress) {

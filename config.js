@@ -10,7 +10,7 @@ const CONFIG = {
   debugRecognition: 0,
 
   // ========== バージョン表記 ==========
-  appVersion: "v2.1.0",
+  appVersion: "v2.2.0",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
   appReleaseNotes: "過去に出力したパーティを呼び出して編集→出力できるようにしました！",
 
@@ -76,6 +76,12 @@ const CONFIG = {
   recognitionCpBBoxMaxWidthPct: 0.85,
   // CP認識: ★除外時に bbox 算出する CP ゾーン上側の高さ比率（★は下から CP ゾーンへ侵入）
   recognitionCpBBoxMaxHeightPct: 0.85,
+  // Match/CP テンプレート画像の同時読み込み数（リモート配信時の 0～70% 短縮用）
+  recognitionTemplateLoadConcurrency: 12,
+  // キャッシュ方針（参考・コード変更なし）:
+  // - Image/Match/** の URL を版間で固定すればブラウザ HTTP キャッシュが版を跨いで流用される
+  // - 版更新で再DLが起きる場合は配信側（版付きパス・短命 Cache-Control）を確認
+  // - iframe 埋め込みでは Service Worker は制約が多いため現状は非採用
 
   // ========== パス設定（通常は変更不要） ==========
   // タイプアイコン画像のフォルダ（Data/Type.csv のパスと実フォルダが異なる場合にここを変更）
