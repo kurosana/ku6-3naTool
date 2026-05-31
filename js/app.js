@@ -178,8 +178,11 @@
 
   function initEntrance() {
     const versionEl = $("app-version");
-    if (versionEl && typeof CONFIG !== "undefined" && CONFIG.appVersion) {
-      versionEl.textContent = CONFIG.appVersion;
+    if (versionEl && typeof CONFIG !== "undefined") {
+      if (CONFIG.appVersion) versionEl.textContent = CONFIG.appVersion;
+      if (CONFIG.entranceFontSizeVersion != null) {
+        versionEl.style.fontSize = CONFIG.entranceFontSizeVersion + "px";
+      }
     }
 
     const releaseNotesEl = $("app-release-notes");
@@ -191,6 +194,24 @@
       } else {
         releaseNotesEl.removeAttribute("hidden");
         releaseNotesEl.textContent = notes;
+      }
+      if (CONFIG.entranceFontSizeReleaseNotes != null) {
+        releaseNotesEl.style.fontSize = CONFIG.entranceFontSizeReleaseNotes + "px";
+      }
+    }
+
+    const mainCommentEl = $("entrance-main-comment");
+    if (mainCommentEl && typeof CONFIG !== "undefined") {
+      const mainComment = typeof CONFIG.entranceMainComment === "string" ? CONFIG.entranceMainComment : "";
+      if (mainComment.trim() === "") {
+        mainCommentEl.setAttribute("hidden", "");
+        mainCommentEl.textContent = "";
+      } else {
+        mainCommentEl.removeAttribute("hidden");
+        mainCommentEl.textContent = mainComment;
+      }
+      if (CONFIG.entranceFontSizeMainComment != null) {
+        mainCommentEl.style.fontSize = CONFIG.entranceFontSizeMainComment + "px";
       }
     }
 

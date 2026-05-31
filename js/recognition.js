@@ -611,7 +611,13 @@ const Recognition = (function () {
   }
 
   /** 指定矩形内の背景でないピクセルを囲む最小矩形を返す */
-  function findNonBackgroundBoundingBox(img, zoneX, zoneY, zoneW, zoneH) {
+  function findNonBackgroundBoundingBox(img, zoneX, zoneY, zoneW, zoneH, excludeStarColor, maxWidthPct, maxHeightPct) {
+    const scanW = (maxWidthPct != null && maxWidthPct > 0 && maxWidthPct < 1)
+      ? Math.max(8, Math.floor(zoneW * maxWidthPct))
+      : zoneW;
+    const scanH = (maxHeightPct != null && maxHeightPct > 0 && maxHeightPct < 1)
+      ? Math.max(8, Math.floor(zoneH * maxHeightPct))
+      : zoneH;
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth || img.width;
     canvas.height = img.naturalHeight || img.height;
@@ -619,16 +625,19 @@ const Recognition = (function () {
     ctx.drawImage(img, 0, 0);
     const id = ctx.getImageData(zoneX, zoneY, zoneW, zoneH);
     const d = id.data;
-    let minX = zoneW, minY = zoneH, maxX = -1, maxY = -1;
-    for (let j = 0; j < zoneH; j++) {
-      for (let i = 0; i < zoneW; i++) {
+    let minX = scanW, minY = scanH, maxX = -1, maxY = -1;
+    for (let j = 0; j < scanH; j++) {
+      for (let i = 0; i < scanW; i++) {
         const idx = (j * zoneW + i) * 4;
-        if (!isBackgroundColor(d[idx], d[idx + 1], d[idx + 2])) {
-          if (i < minX) minX = i;
-          if (j < minY) minY = j;
-          if (i > maxX) maxX = i;
-          if (j > maxY) maxY = j;
-        }
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        if (isBackgroundColor(r, g, b)) continue;
+        if (excludeStarColor && isFavoriteStarColor(r, g, b)) continue;
+        if (i < minX) minX = i;
+        if (j < minY) minY = j;
+        if (i > maxX) maxX = i;
+        if (j > maxY) maxY = j;
       }
     }
     if (maxX < minX || maxY < minY) return null;
@@ -636,6 +645,328 @@ const Recognition = (function () {
     const h = maxY - minY + 1;
     if (w < 8 || h < 8) return null;
     return { x: zoneX + minX, y: zoneY + minY, w, h };
+  }
+
+  function excludeStarFromCP() {
+    return !(typeof CONFIG !== "undefined" && CONFIG.recognitionExcludeStarFromCP === 0);
+  }
+
+  function getCpBBoxMaxWidthPct() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionCpBBoxMaxWidthPct != null)
+      ? CONFIG.recognitionCpBBoxMaxWidthPct
+      : 0.85;
+  }
+
+  function getCpBBoxMaxHeightPct() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionCpBBoxMaxHeightPct != null)
+      ? CONFIG.recognitionCpBBoxMaxHeightPct
+      : 0.75;
+  }
+
+  /** CP ゾーン用: ★色を前景から除外したうえでの外接矩形 */
+  function findCpBoundingBox(img, zoneX, zoneY, zoneW, zoneH) {
+    const scanH = Math.max(8, Math.floor(zoneH * getCpBBoxMaxHeightPct()));
+    const scanW = Math.max(8, Math.floor(zoneW * getCpBBoxMaxWidthPct()));
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const id = ctx.getImageData(zoneX, zoneY, zoneW, zoneH);
+    const d = id.data;
+    let minX = scanW, minY = scanH, maxX = -1, maxY = -1;
+    for (let j = 0; j < scanH; j++) {
+      for (let i = 0; i < scanW; i++) {
+        const idx = (j * zoneW + i) * 4;
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        if (isBackgroundColor(r, g, b)) continue;
+        if (isStarLikePixel(r, g, b, true)) continue;
+        if (i < minX) minX = i;
+        if (j < minY) minY = j;
+        if (i > maxX) maxX = i;
+        if (j > maxY) maxY = j;
+      }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    if (w < 8 || h < 8) return null;
+    return { x: zoneX + minX, y: zoneY + minY, w, h };
+  }
+
+  /** CP 切り出し画像から★色ピクセルを背景色で除去 */
+  function scrubStarPixelsFromImageData(imageData) {
+    const d = imageData.data;
+    const hex = (typeof CONFIG !== "undefined" && CONFIG.recognitionSearchBarColor)
+      ? CONFIG.recognitionSearchBarColor
+      : "#e7f4e0";
+    const [br, bg, bb] = parseHexColor(hex);
+    for (let i = 0; i < d.length; i += 4) {
+      if (isStarLikePixel(d[i], d[i + 1], d[i + 2], true)) {
+        d[i] = br;
+        d[i + 1] = bg;
+        d[i + 2] = bb;
+        d[i + 3] = 255;
+      }
+    }
+  }
+
+  function useConnectedComponentForPokemon() {
+    return !(typeof CONFIG !== "undefined" && CONFIG.recognitionUseConnectedComponent === 0);
+  }
+
+  function getPokemonMinComponentRatio() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionPokemonMinComponentRatio != null)
+      ? CONFIG.recognitionPokemonMinComponentRatio
+      : 0.12;
+  }
+
+  function isFavoriteStarColor(r, g, b) {
+    if (r < 170 || g < 120 || b > 190) return false;
+    if (r - b < 70) return false;
+    if (g - b < 30) return false;
+    return true;
+  }
+
+  /** ★の縁・アンチエイリアス向けの緩い判定（CP 切り出し用） */
+  function isFavoriteStarColorLoose(r, g, b) {
+    if (r < 130 || g < 90 || b > 210) return false;
+    if (r - b < 40) return false;
+    return (r + g) * 0.5 > 155;
+  }
+
+  function isStarLikePixel(r, g, b, loose) {
+    return loose ? isFavoriteStarColorLoose(r, g, b) : isFavoriteStarColor(r, g, b);
+  }
+
+  /** お気に入り★が出やすい右上隅（ゾーン内相対座標） */
+  function isStarCornerRegion(i, j, zoneW, zoneH) {
+    const topPct = (typeof CONFIG !== "undefined" && CONFIG.recognitionStarCornerTopPct != null)
+      ? CONFIG.recognitionStarCornerTopPct
+      : 0.22;
+    const rightPct = (typeof CONFIG !== "undefined" && CONFIG.recognitionStarCornerRightPct != null)
+      ? CONFIG.recognitionStarCornerRightPct
+      : 0.28;
+    return j < zoneH * topPct && i > zoneW * (1 - rightPct);
+  }
+
+  /** ゾーン ImageData から非背景マスクを生成（★色の右上隅は前景から除外） */
+  function buildForegroundMask(imageData, zoneW, zoneH) {
+    const d = imageData.data;
+    const len = zoneW * zoneH;
+    const fg = new Uint8Array(len);
+    for (let j = 0; j < zoneH; j++) {
+      for (let i = 0; i < zoneW; i++) {
+        const idx = (j * zoneW + i) * 4;
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        if (isBackgroundColor(r, g, b)) {
+          fg[j * zoneW + i] = 0;
+          continue;
+        }
+        if (isStarCornerRegion(i, j, zoneW, zoneH) && isFavoriteStarColor(r, g, b)) {
+          fg[j * zoneW + i] = 0;
+          continue;
+        }
+        fg[j * zoneW + i] = 1;
+      }
+    }
+    return fg;
+  }
+
+  /** 8近傍連結成分ラベリング。{ labels, components } を返す */
+  function labelConnectedComponents(fg, zoneW, zoneH) {
+    const len = zoneW * zoneH;
+    const labels = new Int32Array(len);
+    const components = [];
+    const stack = [];
+    let nextLabel = 1;
+
+    for (let y = 0; y < zoneH; y++) {
+      for (let x = 0; x < zoneW; x++) {
+        const p = y * zoneW + x;
+        if (!fg[p] || labels[p]) continue;
+
+        const label = nextLabel++;
+        let size = 0;
+        let minX = x;
+        let minY = y;
+        let maxX = x;
+        let maxY = y;
+        stack.push(x, y);
+        labels[p] = label;
+
+        while (stack.length) {
+          const cy = stack.pop();
+          const cx = stack.pop();
+          size++;
+          if (cx < minX) minX = cx;
+          if (cy < minY) minY = cy;
+          if (cx > maxX) maxX = cx;
+          if (cy > maxY) maxY = cy;
+
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nx = cx + dx;
+              const ny = cy + dy;
+              if (nx < 0 || nx >= zoneW || ny < 0 || ny >= zoneH) continue;
+              const np = ny * zoneW + nx;
+              if (fg[np] && !labels[np]) {
+                labels[np] = label;
+                stack.push(nx, ny);
+              }
+            }
+          }
+        }
+        components.push({ label, size, minX, minY, maxX, maxY });
+      }
+    }
+    return { labels, components };
+  }
+
+  /** シャドウ炎アイコンが出やすい左下隅（ゾーン内相対座標） */
+  function isShadowIconCornerRegion(i, j, zoneW, zoneH) {
+    const bottomPct = (typeof CONFIG !== "undefined" && CONFIG.recognitionShadowCornerBottomPct != null)
+      ? CONFIG.recognitionShadowCornerBottomPct
+      : 0.25;
+    const leftPct = (typeof CONFIG !== "undefined" && CONFIG.recognitionShadowCornerLeftPct != null)
+      ? CONFIG.recognitionShadowCornerLeftPct
+      : 0.28;
+    return j > zoneH * (1 - bottomPct) && i < zoneW * leftPct;
+  }
+
+  /** 成分の重心（ゾーン内座標） */
+  function componentCentroid(c) {
+    return {
+      x: (c.minX + c.maxX) / 2,
+      y: (c.minY + c.maxY) / 2,
+    };
+  }
+
+  /**
+   * 採用成分のラベル集合。
+   * 大成分はすべて採用。小成分は★/炎アイコン隅にある UI マークのみ除外（翼・尻尾等は保持）。
+   */
+  function selectAdoptedComponentLabels(components, zoneW, zoneH) {
+    if (!components.length) return new Set();
+    let maxSize = 0;
+    for (const c of components) {
+      if (c.size > maxSize) maxSize = c.size;
+    }
+    const ratio = getPokemonMinComponentRatio();
+    const threshold = maxSize * ratio;
+    const adopted = new Set();
+    for (const c of components) {
+      if (c.size >= threshold) {
+        adopted.add(c.label);
+        continue;
+      }
+      const center = componentCentroid(c);
+      const inStarCorner = isStarCornerRegion(center.x, center.y, zoneW, zoneH);
+      const inShadowCorner = isShadowIconCornerRegion(center.x, center.y, zoneW, zoneH);
+      if (inStarCorner || inShadowCorner) continue;
+      adopted.add(c.label);
+    }
+    return adopted;
+  }
+
+  /** 採用成分のみの外接矩形（ゾーン内座標） */
+  function bboxFromAdoptedComponents(components, adoptedLabels, zoneW, zoneH) {
+    let minX = zoneW;
+    let minY = zoneH;
+    let maxX = -1;
+    let maxY = -1;
+    for (const c of components) {
+      if (!adoptedLabels.has(c.label)) continue;
+      if (c.minX < minX) minX = c.minX;
+      if (c.minY < minY) minY = c.minY;
+      if (c.maxX > maxX) maxX = c.maxX;
+      if (c.maxY > maxY) maxY = c.maxY;
+    }
+    if (maxX < minX || maxY < minY) return null;
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    if (w < 8 || h < 8) return null;
+    return { minX, minY, w, h };
+  }
+
+  /** 非採用成分を背景色で塗りつぶした作業 canvas を返す */
+  function buildMaskedPokemonCropSource(sourceCanvas, zoneX, zoneY, zoneW, zoneH, labels, adoptedLabels) {
+    const out = document.createElement("canvas");
+    out.width = sourceCanvas.width;
+    out.height = sourceCanvas.height;
+    const ctx = out.getContext("2d");
+    ctx.drawImage(sourceCanvas, 0, 0);
+    const masked = ctx.getImageData(zoneX, zoneY, zoneW, zoneH);
+    const md = masked.data;
+    const hex = (typeof CONFIG !== "undefined" && CONFIG.recognitionSearchBarColor)
+      ? CONFIG.recognitionSearchBarColor
+      : "#e7f4e0";
+    const [br, bg, bb] = parseHexColor(hex);
+
+    for (let j = 0; j < zoneH; j++) {
+      for (let i = 0; i < zoneW; i++) {
+        const p = j * zoneW + i;
+        const label = labels[p];
+        if (!label || !adoptedLabels.has(label)) {
+          const idx = p * 4;
+          md[idx] = br;
+          md[idx + 1] = bg;
+          md[idx + 2] = bb;
+          md[idx + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(masked, zoneX, zoneY);
+    return out;
+  }
+
+  /**
+   * 連結成分ベースでポケモン本体の外接矩形を求める。
+   * ★・シャドウ炎など小さな分離成分は除外。cropSource にマスク済み canvas を返す。
+   */
+  function findPokemonBoundingBoxCC(img, zoneX, zoneY, zoneW, zoneH) {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const zoneId = ctx.getImageData(zoneX, zoneY, zoneW, zoneH);
+    const fg = buildForegroundMask(zoneId, zoneW, zoneH);
+    const { labels, components } = labelConnectedComponents(fg, zoneW, zoneH);
+    if (!components.length) return null;
+
+    const adoptedLabels = selectAdoptedComponentLabels(components, zoneW, zoneH);
+    if (!adoptedLabels.size) return null;
+
+    const local = bboxFromAdoptedComponents(components, adoptedLabels, zoneW, zoneH);
+    if (!local) return null;
+
+    const cropSource = buildMaskedPokemonCropSource(
+      canvas, zoneX, zoneY, zoneW, zoneH, labels, adoptedLabels
+    );
+    return {
+      x: zoneX + local.minX,
+      y: zoneY + local.minY,
+      w: local.w,
+      h: local.h,
+      cropSource,
+    };
+  }
+
+  /** ポケモンゾーンの bbox と切り出し元（マスク済み canvas または元画像） */
+  function findPokemonBoundingBox(img, zoneX, zoneY, zoneW, zoneH) {
+    if (useConnectedComponentForPokemon()) {
+      const cc = findPokemonBoundingBoxCC(img, zoneX, zoneY, zoneW, zoneH);
+      if (cc) return cc;
+    }
+    const bbox = findNonBackgroundBoundingBox(img, zoneX, zoneY, zoneW, zoneH);
+    if (!bbox) return null;
+    return { ...bbox, cropSource: img };
   }
 
   function cropAndResizeTo(img, srcX, srcY, srcW, srcH, outW, outH) {
@@ -647,15 +978,17 @@ const Recognition = (function () {
     return ctx.getImageData(0, 0, outW, outH);
   }
 
-  function detectPokemonWithVariableTemplates(img, cropRect) {
-    if (!matchTemplates.length || !cropRect) return { match: null, bestScore: 0, isShadow: false, isLight: false };
+  function detectPokemonWithVariableTemplates(cropSource, cropRect) {
+    if (!matchTemplates.length || !cropRect || !cropSource) {
+      return { match: null, bestScore: 0, isShadow: false, isLight: false };
+    }
     let best = null;
     let bestScore = -1;
     let bestTemplate = null;
     const threshold = THRESHOLD();
     const ignoreBg = (typeof CONFIG !== "undefined" && CONFIG.recognitionIgnoreBackground);
     for (const t of matchTemplates) {
-      const id = cropAndResizeTo(img, cropRect.x, cropRect.y, cropRect.w, cropRect.h, t.w, t.h);
+      const id = cropAndResizeTo(cropSource, cropRect.x, cropRect.y, cropRect.w, cropRect.h, t.w, t.h);
       // スクリーンショット側の背景マスクをテンプレートリサイズ後に生成（背景色ピクセルを除外）
       let gray, bgMask;
       if (ignoreBg) {
@@ -677,12 +1010,10 @@ const Recognition = (function () {
     return { match: best, bestScore: bestScore > -1 ? bestScore : 0, isShadow, isLight };
   }
 
-  function detectCPInZone(img, zoneRect) {
-    if (!cpTemplates.length || !zoneRect) return { cp: null, score: 0 };
-    const bbox = findNonBackgroundBoundingBox(img, zoneRect.x, zoneRect.y, zoneRect.w, zoneRect.h);
-    const rect = bbox || zoneRect;
+  function matchCpFromCrop(img, rect, excludeStar) {
     const outSize = 24;
     const id = cropAndResize(img, rect.x, rect.y, rect.w, rect.h, outSize, outSize);
+    if (excludeStar) scrubStarPixelsFromImageData(id);
     const gray = imageDataToGray(id);
     const cpWeights = getCpWeights(outSize);
     let best = null;
@@ -692,6 +1023,51 @@ const Recognition = (function () {
       if (r > bestScore) { bestScore = r; best = t.cp; }
     }
     return { cp: best, score: bestScore };
+  }
+
+  function pushUniqueCpCandidate(list, rect) {
+    if (!rect || rect.w < 8 || rect.h < 8) return;
+    const key = rect.x + "," + rect.y + "," + rect.w + "," + rect.h;
+    if (list.some((c) => c.key === key)) return;
+    list.push({ key, rect });
+  }
+
+  function detectCPInZone(img, zoneRect) {
+    if (!cpTemplates.length || !zoneRect) return { cp: null, score: 0 };
+    const excludeStar = excludeStarFromCP();
+    const candidates = [];
+
+    if (excludeStar) {
+      pushUniqueCpCandidate(candidates, findCpBoundingBox(
+        img, zoneRect.x, zoneRect.y, zoneRect.w, zoneRect.h
+      ));
+      const wPct = getCpBBoxMaxWidthPct();
+      const heights = [0.75, 0.85, 1.0];
+      for (const hPct of heights) {
+        pushUniqueCpCandidate(candidates, findNonBackgroundBoundingBox(
+          img, zoneRect.x, zoneRect.y, zoneRect.w, zoneRect.h,
+          true, wPct, hPct
+        ));
+      }
+      pushUniqueCpCandidate(candidates, {
+        x: zoneRect.x,
+        y: zoneRect.y,
+        w: Math.max(8, Math.floor(zoneRect.w * wPct)),
+        h: Math.max(8, Math.floor(zoneRect.h * 0.75)),
+      });
+    }
+
+    pushUniqueCpCandidate(candidates, findNonBackgroundBoundingBox(
+      img, zoneRect.x, zoneRect.y, zoneRect.w, zoneRect.h, false
+    ));
+    pushUniqueCpCandidate(candidates, zoneRect);
+
+    let best = { cp: null, score: 0.5 };
+    for (const c of candidates) {
+      const r = matchCpFromCrop(img, c.rect, excludeStar);
+      if (r.score > best.score) best = r;
+    }
+    return best;
   }
 
   function yieldToUI() {
@@ -737,8 +1113,14 @@ const Recognition = (function () {
       const pkZone = row === 0 ? zones.pokemon1[col] : zones.pokemon2[col];
       const cpZone = row === 0 ? zones.cp1[col] : zones.cp2[col];
 
-      const pokemonBbox = findNonBackgroundBoundingBox(image, pkZone.x, pkZone.y, pkZone.w, pkZone.h);
-      const pokemonResult = detectPokemonWithVariableTemplates(image, pokemonBbox);
+      const pokemonAnalysis = findPokemonBoundingBox(image, pkZone.x, pkZone.y, pkZone.w, pkZone.h);
+      const pokemonBbox = pokemonAnalysis
+        ? { x: pokemonAnalysis.x, y: pokemonAnalysis.y, w: pokemonAnalysis.w, h: pokemonAnalysis.h }
+        : null;
+      const pokemonResult = detectPokemonWithVariableTemplates(
+        pokemonAnalysis ? pokemonAnalysis.cropSource : image,
+        pokemonBbox
+      );
       const cpResult = detectCPInZone(image, cpZone);
       const cpBbox = findNonBackgroundBoundingBox(image, cpZone.x, cpZone.y, cpZone.w, cpZone.h);
 

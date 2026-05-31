@@ -9,9 +9,20 @@ const CONFIG = {
   // 1 にすると画像認識のデバッグモードがON。読み込んだ画像の切り取り範囲・判定結果をオーバーレイで表示します。
   debugRecognition: 0,
 
+  // ========== バージョン表記 ==========
+  appVersion: "v2.0.0",
+  // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
+  appReleaseNotes: "過去に出力したパーティを呼び出して編集→出力できるようにしました！",
+
   // ========== エントランス画面の説明文 ==========
-  // 画像読み込みについての説明（「画像を読み込む」ボタンの下に表示）
-  imageLoadExplanation: "6匹の「お気に入りでない」ポケモンだけが映ったタグのスクリーンショットをトリミングせず読み込ませてください",
+  // 中央に大きく表示するメインコメント（空文字 "" にすると非表示）
+  entranceMainComment: "お気に入り★の画像認識対応！",
+  // エントランス画面のフォントサイズ（px）
+  entranceFontSizeVersion: 11,
+  entranceFontSizeReleaseNotes: 11,
+  entranceFontSizeMainComment: 22,
+  // 画像読み込みについての説明（画面下部に表示）
+  imageLoadExplanation: "6匹のポケモンだけが映ったタグのスクリーンショットをトリミングせず読み込ませてください",
 
   // ========== 画像認識 ==========
   // テンプレート画像との一致度の閾値（0～1）。これより類似度が高いとマッチと判定
@@ -45,6 +56,21 @@ const CONFIG = {
   recognitionCpRightWeight: 3.0,
   // 背景とみなす色（明るいグラデーション・検索欄）
   recognitionBgGrayMin: 248,
+  // ポケモン切り抜き: 連結成分で★等の小さな分離マークを除外（0=従来方式）
+  recognitionUseConnectedComponent: 1,
+  // 最大連結成分に対する採用閾値（これ未満の小成分=★・炎アイコン等を除外）
+  recognitionPokemonMinComponentRatio: 0.12,
+  // ★除外: ポケモンゾーン右上隅の範囲（相対比率）
+  recognitionStarCornerTopPct: 0.22,
+  recognitionStarCornerRightPct: 0.28,
+  recognitionShadowCornerBottomPct: 0.25,
+  recognitionShadowCornerLeftPct: 0.28,
+  // CP認識: 外接矩形からお気に入り★の黄色ピクセルを除外（0=従来方式）
+  recognitionExcludeStarFromCP: 1,
+  // CP認識: ★除外時に bbox 算出する CP ゾーン左側の幅比率（CP 文字列は左寄せ）
+  recognitionCpBBoxMaxWidthPct: 0.85,
+  // CP認識: ★除外時に bbox 算出する CP ゾーン上側の高さ比率（★は下から CP ゾーンへ侵入）
+  recognitionCpBBoxMaxHeightPct: 0.85,
 
   // ========== パス設定（通常は変更不要） ==========
   // タイプアイコン画像のフォルダ（Data/Type.csv のパスと実フォルダが異なる場合にここを変更）
@@ -55,20 +81,15 @@ const CONFIG = {
   outputHeight: 2480,
   templatePath: "Image/Template.png",
 
-  // ========== バージョン表記 ==========
-  appVersion: "v1.4.7",
-  // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
-  appReleaseNotes: "過去に出力したパーティを呼び出して編集→再出力できるようにしました！",
-
   // ========== 英語出力フォントサイズ ==========
   outputEngPokemonNameSize: 57,
   outputEngMoveNameSize: 40,
 
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※キャッシュがないと少し時間かかります",
-  labelRecognitionHint2: "お気に入りマーク(★)で認識精度落ちます",
-  labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材提供求）",
-  labelSheetNote2: "→色違い・相棒・お気に入り・24時間以内捕獲の背景あると認識不可(現状)",
+  labelRecognitionHint2: "",
+  labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材不足）",
+  labelSheetNote2: "→色違い・相棒・24時間以内捕獲は現状認識不可",
   labelSheetNote3: "→認識されなかった場合は「画像認識失敗」をタッチして手動でお願いします",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",

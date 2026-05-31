@@ -112,6 +112,17 @@ body {
   gap: 0.5rem;
 }
 
+.entrance-main-comment {
+  margin: 0 0 1.25rem;
+  padding: 0 0.25rem;
+  font-size: 1.25rem;
+  font-weight: bold;
+  line-height: 1.55;
+  text-align: center;
+  color: var(--text);
+  white-space: pre-line;
+}
+
 .entrance-past-row {
   display: flex;
   justify-content: flex-end;
