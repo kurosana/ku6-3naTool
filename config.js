@@ -10,7 +10,7 @@ const CONFIG = {
   debugRecognition: 0,
 
   // ========== バージョン表記 ==========
-  appVersion: "v2.0.0",
+  appVersion: "v2.1.0",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
   appReleaseNotes: "過去に出力したパーティを呼び出して編集→出力できるようにしました！",
 
@@ -63,6 +63,11 @@ const CONFIG = {
   // ★除外: ポケモンゾーン右上隅の範囲（相対比率）
   recognitionStarCornerTopPct: 0.22,
   recognitionStarCornerRightPct: 0.28,
+  // ★除外: 上部バンド（X非依存）と星ブロブ判定
+  recognitionStarTopBandPct: 0.35,
+  recognitionStarMaskTopBandPct: 0.22,
+  recognitionStarComponentMaxSizeRatio: 0.5,
+  recognitionStarPixelFracInComponent: 0.4,
   recognitionShadowCornerBottomPct: 0.25,
   recognitionShadowCornerLeftPct: 0.28,
   // CP認識: 外接矩形からお気に入り★の黄色ピクセルを除外（0=従来方式）
@@ -87,9 +92,9 @@ const CONFIG = {
 
   // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※キャッシュがないと少し時間かかります",
-  labelRecognitionHint2: "",
+  labelRecognitionHint2: "お気に入り対応しましたが認識精度は落ちます",
   labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材不足）",
-  labelSheetNote2: "→色違い・相棒・24時間以内捕獲は現状認識不可",
+  labelSheetNote2: "→色違い・相棒・24時間以内捕獲・白いポケモンは現状認識不可",
   labelSheetNote3: "→認識されなかった場合は「画像認識失敗」をタッチして手動でお願いします",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",

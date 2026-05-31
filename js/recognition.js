@@ -723,6 +723,34 @@ const Recognition = (function () {
       : 0.12;
   }
 
+  function getStarTopBandPct() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionStarTopBandPct != null)
+      ? CONFIG.recognitionStarTopBandPct
+      : 0.35;
+  }
+
+  /** 前景マスクから★色を除去する上部帯（★は通常ここより上にのみ出現） */
+  function getStarMaskTopBandPct() {
+    if (typeof CONFIG !== "undefined" && CONFIG.recognitionStarMaskTopBandPct != null) {
+      return CONFIG.recognitionStarMaskTopBandPct;
+    }
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionStarCornerTopPct != null)
+      ? CONFIG.recognitionStarCornerTopPct
+      : 0.22;
+  }
+
+  function getStarComponentMaxSizeRatio() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionStarComponentMaxSizeRatio != null)
+      ? CONFIG.recognitionStarComponentMaxSizeRatio
+      : 0.5;
+  }
+
+  function getStarPixelFracInComponent() {
+    return (typeof CONFIG !== "undefined" && CONFIG.recognitionStarPixelFracInComponent != null)
+      ? CONFIG.recognitionStarPixelFracInComponent
+      : 0.4;
+  }
+
   function isFavoriteStarColor(r, g, b) {
     if (r < 170 || g < 120 || b > 190) return false;
     if (r - b < 70) return false;
@@ -752,7 +780,13 @@ const Recognition = (function () {
     return j < zoneH * topPct && i > zoneW * (1 - rightPct);
   }
 
-  /** ゾーン ImageData から非背景マスクを生成（★色の右上隅は前景から除外） */
+  /** お気に入り★が出やすい上部バンド（ゾーン内相対座標・X非依存） */
+  function isStarTopBandRegion(j, zoneH, maskBand) {
+    const pct = maskBand ? getStarMaskTopBandPct() : getStarTopBandPct();
+    return j < zoneH * pct;
+  }
+
+  /** ゾーン ImageData から非背景マスクを生成（★色の上部バンドは前景から除外） */
   function buildForegroundMask(imageData, zoneW, zoneH) {
     const d = imageData.data;
     const len = zoneW * zoneH;
@@ -767,22 +801,41 @@ const Recognition = (function () {
           fg[j * zoneW + i] = 0;
           continue;
         }
-        if (isStarCornerRegion(i, j, zoneW, zoneH) && isFavoriteStarColor(r, g, b)) {
-          fg[j * zoneW + i] = 0;
-          continue;
-        }
         fg[j * zoneW + i] = 1;
+      }
+    }
+
+    const { components } = labelConnectedComponents(fg, zoneW, zoneH, imageData);
+    if (!components.length) return fg;
+    let maxSize = 0;
+    for (const c of components) {
+      if (c.size > maxSize) maxSize = c.size;
+    }
+    const hasStarBlob = components.some((c) => isStarBlobComponent(c, maxSize, zoneH));
+    if (!hasStarBlob) return fg;
+
+    const maskBand = zoneH * getStarMaskTopBandPct();
+    for (let j = 0; j < zoneH && j < maskBand; j++) {
+      for (let i = 0; i < zoneW; i++) {
+        const idx = (j * zoneW + i) * 4;
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        if (isFavoriteStarColor(r, g, b)) {
+          fg[j * zoneW + i] = 0;
+        }
       }
     }
     return fg;
   }
 
-  /** 8近傍連結成分ラベリング。{ labels, components } を返す */
-  function labelConnectedComponents(fg, zoneW, zoneH) {
+  /** 8近傍連結成分ラベリング。{ labels, components } を返す（★色ピクセル数付き） */
+  function labelConnectedComponents(fg, zoneW, zoneH, imageData) {
     const len = zoneW * zoneH;
     const labels = new Int32Array(len);
     const components = [];
     const stack = [];
+    const d = imageData ? imageData.data : null;
     let nextLabel = 1;
 
     for (let y = 0; y < zoneH; y++) {
@@ -792,6 +845,7 @@ const Recognition = (function () {
 
         const label = nextLabel++;
         let size = 0;
+        let starPx = 0;
         let minX = x;
         let minY = y;
         let maxX = x;
@@ -807,6 +861,10 @@ const Recognition = (function () {
           if (cy < minY) minY = cy;
           if (cx > maxX) maxX = cx;
           if (cy > maxY) maxY = cy;
+          if (d) {
+            const idx = (cy * zoneW + cx) * 4;
+            if (isFavoriteStarColorLoose(d[idx], d[idx + 1], d[idx + 2])) starPx++;
+          }
 
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -822,7 +880,7 @@ const Recognition = (function () {
             }
           }
         }
-        components.push({ label, size, minX, minY, maxX, maxY });
+        components.push({ label, size, starPx, minX, minY, maxX, maxY });
       }
     }
     return { labels, components };
@@ -847,6 +905,20 @@ const Recognition = (function () {
     };
   }
 
+  /** ★色主体の小成分か（上部バンド内・X位置非依存） */
+  function isStarBlobComponent(c, maxSize, zoneH) {
+    if (!c || c.size <= 0) return false;
+    const starPx = c.starPx || 0;
+    const starFrac = starPx / c.size;
+    const center = componentCentroid(c);
+    const topBand = zoneH * getStarTopBandPct();
+    const maxStarSize = maxSize * getStarComponentMaxSizeRatio();
+    if (c.size >= maxStarSize || center.y >= topBand) return false;
+    if (starFrac >= getStarPixelFracInComponent()) return true;
+    // ★が本体に少し接続している場合（左列で★中心が除外枠外に出るケース）
+    return starPx >= 8 && starFrac >= 0.12;
+  }
+
   /**
    * 採用成分のラベル集合。
    * 大成分はすべて採用。小成分は★/炎アイコン隅にある UI マークのみ除外（翼・尻尾等は保持）。
@@ -865,6 +937,7 @@ const Recognition = (function () {
         adopted.add(c.label);
         continue;
       }
+      if (isStarBlobComponent(c, maxSize, zoneH)) continue;
       const center = componentCentroid(c);
       const inStarCorner = isStarCornerRegion(center.x, center.y, zoneW, zoneH);
       const inShadowCorner = isShadowIconCornerRegion(center.x, center.y, zoneW, zoneH);
@@ -937,7 +1010,7 @@ const Recognition = (function () {
     ctx.drawImage(img, 0, 0);
     const zoneId = ctx.getImageData(zoneX, zoneY, zoneW, zoneH);
     const fg = buildForegroundMask(zoneId, zoneW, zoneH);
-    const { labels, components } = labelConnectedComponents(fg, zoneW, zoneH);
+    const { labels, components } = labelConnectedComponents(fg, zoneW, zoneH, zoneId);
     if (!components.length) return null;
 
     const adoptedLabels = selectAdoptedComponentLabels(components, zoneW, zoneH);

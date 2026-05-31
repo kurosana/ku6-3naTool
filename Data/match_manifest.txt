@@ -39,6 +39,7 @@ Normal/214.png
 Normal/219.png
 Normal/22.png
 Normal/221.png
+Normal/222-1#.png
 Normal/222-1.png
 Normal/226.png
 Normal/227.png
@@ -171,6 +172,8 @@ Normal/68.png
 Normal/680.png
 Normal/681.png
 Normal/685.png
+Normal/687##.png
+Normal/687#.png
 Normal/687.png
 Normal/689.png
 Normal/691.png
