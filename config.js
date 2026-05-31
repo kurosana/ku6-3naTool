@@ -10,7 +10,7 @@ const CONFIG = {
   debugRecognition: 0,
 
   // ========== バージョン表記 ==========
-  appVersion: "v2.2.0",
+  appVersion: "v2.3.0",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
   appReleaseNotes: "過去に出力したパーティを呼び出して編集→出力できるようにしました！",
 
@@ -66,6 +66,8 @@ const CONFIG = {
   // ★除外: 上部バンド（X非依存）と星ブロブ判定
   recognitionStarTopBandPct: 0.35,
   recognitionStarMaskTopBandPct: 0.22,
+  // ★色プリ除去マスクのX下限（★は常に右上のため左側の羽等を保全）
+  recognitionStarMaskLeftPct: 0.55,
   recognitionStarComponentMaxSizeRatio: 0.5,
   recognitionStarPixelFracInComponent: 0.4,
   recognitionShadowCornerBottomPct: 0.25,
