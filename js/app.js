@@ -957,33 +957,14 @@
     }
     hideProgress();
 
-    // ── 出力 ─────────────────────────────────────────────────
-    const url = URL.createObjectURL(blob);
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    // スマホ: ダウンロード / PC: 新規タブ表示
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "teamsheet.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    if (!isMobile) {
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
-        win.document.close();
-      }
-    }
-
-    // ── 履歴保存 ─────────────────────────────────────────────
+    // ── 履歴保存（画像出力より先。スマホでは出力後にページ遷移・中断されうる）──
     {
       try {
         const list = loadHistory();
-        const dataUrl = await new Promise((resolve) => {
+        const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(blob);
         });
         const entry = { dataUrl, at: Date.now(), json: buildPartyJson(state) };
@@ -998,10 +979,47 @@
         } else {
           list.unshift(entry);
         }
-        const saved = saveHistory(list);
+        let saved = saveHistory(list);
+        if (!saved) {
+          // 容量超過時は json のみ残す（パーティ呼び出しは可能にする）
+          entry.dataUrl = null;
+          saved = saveHistory(list);
+        }
         if (saved) historyReplaceSlotIndex = null;
       } catch (e) {
         console.warn("[画像出力] 履歴保存エラー:", e);
+      }
+    }
+
+    // ── 出力 ─────────────────────────────────────────────────
+    const url = URL.createObjectURL(blob);
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    if (!isMobile) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "teamsheet.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
+        win.document.close();
+      }
+    } else if (isIframeMobile()) {
+      showImageFallback(url);
+    } else {
+      const file = new File([blob], "teamsheet.png", { type: "image/png" });
+      const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+      if (canWebShare) {
+        try {
+          await navigator.share({ files: [file], title: "チームシート" });
+        } catch (e) {
+          if (e.name !== "AbortError") showImageFallback(url);
+        }
+      } else {
+        showImageFallback(url);
       }
     }
   }
@@ -1020,9 +1038,12 @@
       const btn = hasJson
         ? `<button type="button" class="btn-edit-party" data-history-index="${i}">このパーティを編集</button>`
         : `<button type="button" class="btn-edit-party" disabled>過去バージョン画像</button>`;
+      const imgHtml = item.dataUrl
+        ? `<img src="${item.dataUrl}" alt="過去のシート ${i + 1}">`
+        : `<p class="history-no-image">画像なし（パーティデータのみ）</p>`;
       return `
       <div class="history-item">
-        <img src="${item.dataUrl}" alt="過去のシート ${i + 1}">
+        ${imgHtml}
         <div class="history-meta">
           <span class="history-date">${dateText}</span>
           ${btn}

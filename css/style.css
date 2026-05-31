@@ -545,6 +545,14 @@ body {
   width: 100%;
   display: block;
 }
+.history-item .history-no-image {
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: #f3f4f6;
+}
 .history-item .history-meta {
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;

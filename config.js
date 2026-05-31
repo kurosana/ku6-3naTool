@@ -56,7 +56,7 @@ const CONFIG = {
   templatePath: "Image/Template.png",
 
   // ========== バージョン表記 ==========
-  appVersion: "v1.4.3",
+  appVersion: "v1.4.4",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
   appReleaseNotes: "過去に出力したパーティを呼び出して編集→再出力できるようにしました！",
 
