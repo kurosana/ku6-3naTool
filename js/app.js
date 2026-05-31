@@ -12,6 +12,8 @@
     engOutput: "teamSheet_engOutput",
   };
   const MAX_HISTORY = 3;
+  const HISTORY_THUMB_MAX_W = 400;
+  const HISTORY_THUMB_JPEG_QUALITY = 0.85;
 
   let state = {
     recognitionAttempted: false,
@@ -109,6 +111,64 @@
       console.error("[履歴] saveHistory failed:", e && e.name, e && e.message, e);
       return false;
     }
+  }
+
+  /** 履歴用サムネイル（localStorage 容量対策: フル PNG ではなく JPEG 縮小版） */
+  async function createHistoryDataUrl(blob) {
+    const previewCanvas = document.querySelector("#preview-overlay-content canvas");
+    if (previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0) {
+      try {
+        return previewCanvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
+      } catch (_) { /* フル blob から生成 */ }
+    }
+
+    const maxW = HISTORY_THUMB_MAX_W;
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bitmap = await createImageBitmap(blob);
+        const scale = Math.min(1, maxW / bitmap.width);
+        const w = Math.max(1, Math.round(bitmap.width * scale));
+        const h = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+        bitmap.close();
+        return canvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
+      } catch (_) { /* Image フォールバック */ }
+    }
+
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("thumb load failed"));
+        el.src = url;
+      });
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  /** 容量超過時は古い履歴の画像を削除してから再試行 */
+  function saveHistoryWithEviction(list) {
+    const work = list.slice(0, MAX_HISTORY);
+    if (saveHistory(work)) return true;
+    for (let i = work.length - 1; i >= 0; i--) {
+      if (!work[i].dataUrl) continue;
+      work[i] = { ...work[i], dataUrl: null };
+      if (saveHistory(work)) return true;
+    }
+    return false;
   }
 
   function setPlaceholder(el, key) {
@@ -961,12 +1021,7 @@
     {
       try {
         const list = loadHistory();
-        const dataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(blob);
-        });
+        const dataUrl = await createHistoryDataUrl(blob);
         const entry = { dataUrl, at: Date.now(), json: buildPartyJson(state) };
         const slot = historyReplaceSlotIndex;
         if (
@@ -979,9 +1034,8 @@
         } else {
           list.unshift(entry);
         }
-        let saved = saveHistory(list);
+        let saved = saveHistoryWithEviction(list);
         if (!saved) {
-          // 容量超過時は json のみ残す（パーティ呼び出しは可能にする）
           entry.dataUrl = null;
           saved = saveHistory(list);
         }
