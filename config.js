@@ -10,9 +10,9 @@ const CONFIG = {
   debugRecognition: 0,
 
   // ========== バージョン表記 ==========
-  appVersion: "v2.3.0",
+  appVersion: "v2.3.1",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
-  appReleaseNotes: "過去に出力したパーティを呼び出して編集→出力できるようにしました！",
+  appReleaseNotes: "出力履歴機能の追加・ガマゲロゲなど新強化対応",
 
   // ========== エントランス画面の説明文 ==========
   // 中央に大きく表示するメインコメント（空文字 "" にすると非表示）
@@ -109,6 +109,9 @@ const CONFIG = {
   labelFriendCode: "フレンドコード",
   labelSelectPokemon: "ポケモン選択",
   labelRecognitionFailed: "画像認識失敗",
+  labelOptionalSuffix: "(任意)",
+  labelStartNoMoves: "わざなしで開始",
+  labelClearAllMoves: "技を全消去",
   labelCp: "CP",
   labelShadow: "シャドウ",
   labelLight: "ライト",

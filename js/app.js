@@ -17,6 +17,7 @@
 
   let state = {
     recognitionAttempted: false,
+    noMovesMode: false,
     handleName: "",
     trainerName: "",
     friendCode: "",
@@ -76,18 +77,26 @@
 
   function loadSavedInputs() {
     try {
-      state.handleName = localStorage.getItem(STORAGE_KEYS.handleName) || "";
-      state.trainerName = localStorage.getItem(STORAGE_KEYS.trainerName) || "";
-      state.friendCode = localStorage.getItem(STORAGE_KEYS.friendCode) || "";
+      if (state.noMovesMode) {
+        state.handleName = "";
+        state.trainerName = "";
+        state.friendCode = "";
+      } else {
+        state.handleName = localStorage.getItem(STORAGE_KEYS.handleName) || "";
+        state.trainerName = localStorage.getItem(STORAGE_KEYS.trainerName) || "";
+        state.friendCode = localStorage.getItem(STORAGE_KEYS.friendCode) || "";
+      }
       state.engOutput = localStorage.getItem(STORAGE_KEYS.engOutput) === "1";
     } catch (_) {}
   }
 
   function saveInputs() {
     try {
-      localStorage.setItem(STORAGE_KEYS.handleName, state.handleName);
-      localStorage.setItem(STORAGE_KEYS.trainerName, state.trainerName);
-      localStorage.setItem(STORAGE_KEYS.friendCode, state.friendCode);
+      if (!state.noMovesMode) {
+        localStorage.setItem(STORAGE_KEYS.handleName, state.handleName);
+        localStorage.setItem(STORAGE_KEYS.trainerName, state.trainerName);
+        localStorage.setItem(STORAGE_KEYS.friendCode, state.friendCode);
+      }
       localStorage.setItem(STORAGE_KEYS.engOutput, state.engOutput ? "1" : "0");
     } catch (_) {}
   }
@@ -222,6 +231,13 @@
 
     $("btn-load-image").addEventListener("click", () => $("input-image").click());
     $("btn-start-without").addEventListener("click", () => openSheetWithRecognitionResult(null));
+    const btnStartNoMoves = $("btn-start-no-moves");
+    if (btnStartNoMoves) {
+      if (typeof CONFIG !== "undefined" && CONFIG.labelStartNoMoves) {
+        btnStartNoMoves.textContent = CONFIG.labelStartNoMoves;
+      }
+      btnStartNoMoves.addEventListener("click", () => openSheetWithRecognitionResult(null, { noMovesMode: true }));
+    }
     $("btn-past").addEventListener("click", () => {
       renderHistory();
       showScreen("history");
@@ -295,8 +311,9 @@
     });
   }
 
-  function openSheetWithRecognitionResult(result) {
+  function openSheetWithRecognitionResult(result, options) {
     historyReplaceSlotIndex = null;
+    state.noMovesMode = !!(options && options.noMovesMode);
     loadSavedInputs();
     state.handleName = state.handleName || "";
     state.trainerName = state.trainerName || "";
@@ -312,7 +329,7 @@
         slot.cp = r.cp != null ? String(r.cp) : "";
         slot.isShadow = !!r.isShadow;
         slot.isLight = !!r.isLight;
-        if (r.dexNo && DataService) {
+        if (r.dexNo && DataService && !state.noMovesMode) {
           const p = DataService.getPokemonByDexNo(r.dexNo);
           if (p) {
             const def = DataService.getDefaultMoves(p);
@@ -320,6 +337,10 @@
             slot.charge1 = def.charge1 || "";
             slot.charge2 = def.charge2 || "";
           }
+        } else if (state.noMovesMode) {
+          slot.fast = "";
+          slot.charge1 = "";
+          slot.charge2 = "";
         }
       });
     } else {
@@ -336,8 +357,38 @@
     }
 
     bindSheetForm();
+    updateSheetModeUI();
     renderPokemonSlots();
     showScreen("sheet");
+  }
+
+  function updateSheetModeUI() {
+    const sheet = $("screen-sheet");
+    if (sheet) sheet.classList.toggle("sheet-no-moves", !!state.noMovesMode);
+
+    const opt = (typeof CONFIG !== "undefined" && CONFIG.labelOptionalSuffix) || "(任意)";
+    const suffix = state.noMovesMode ? opt : "";
+    const labelHandle = $("label-handle");
+    const labelTrainer = $("label-trainer");
+    const labelFriend = $("label-friendcode");
+    const baseHandle = (typeof CONFIG !== "undefined" && CONFIG.labelHandleName) || "ハンドルネーム";
+    const baseTrainer = (typeof CONFIG !== "undefined" && CONFIG.labelTrainerName) || "トレーナーネーム";
+    const baseFriend = (typeof CONFIG !== "undefined" && CONFIG.labelFriendCode) || "フレンドコード";
+    if (labelHandle) labelHandle.textContent = baseHandle + suffix;
+    if (labelTrainer) labelTrainer.textContent = baseTrainer + suffix;
+    if (labelFriend) labelFriend.textContent = baseFriend + suffix;
+
+    const btnClearMoves = $("btn-clear-moves");
+    if (btnClearMoves) btnClearMoves.hidden = !!state.noMovesMode;
+  }
+
+  function clearAllMoves() {
+    state.pokemons.forEach((p) => {
+      p.fast = "";
+      p.charge1 = "";
+      p.charge2 = "";
+    });
+    renderPokemonSlots();
   }
 
   function bindSheetForm() {
@@ -390,6 +441,14 @@
         }, 2000);
       };
     }
+
+    const btnClearMoves = $("btn-clear-moves");
+    if (btnClearMoves) {
+      if (typeof CONFIG !== "undefined" && CONFIG.labelClearAllMoves) {
+        btnClearMoves.textContent = CONFIG.labelClearAllMoves;
+      }
+      btnClearMoves.onclick = () => clearAllMoves();
+    }
   }
 
   function renderPokemonSlots() {
@@ -417,6 +476,13 @@
       const charge1Opts = chargeList.map((m) => `<option value="${escapeHtml(m)}" ${m === p.charge1 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
       const charge2Opts = chargeList.map((m) => `<option value="${escapeHtml(m)}" ${m === p.charge2 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
 
+      const movesBlock = state.noMovesMode ? "" : `
+          <div class="slot-moves">
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>
+          </div>`;
+
       return `
         <div class="pokemon-slot" data-slot="${i}">
           <div class="slot-name-wrap">
@@ -427,12 +493,7 @@
           <div class="slot-shadow-light">
             <button type="button" class="shadow-light-btn ${p.isShadow ? "pressed" : ""}" data-slot="${i}" data-btn="shadow" title="シャドウ"><img src="${shadowLightPath}shadow.png" alt="シャドウ"></button>
             <button type="button" class="shadow-light-btn ${p.isLight ? "pressed" : ""}" data-slot="${i}" data-btn="light" title="ライト"><img src="${shadowLightPath}light.png" alt="ライト"></button>
-          </div>
-          <div class="slot-moves">
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>
-          </div>
+          </div>${movesBlock}
         </div>`;
     }).join("");
 
@@ -583,9 +644,15 @@
     const slot = state.pokemons[currentSearchSlotIndex];
     slot.dexNo = dexNo;
     slot.name = name;
-    slot.fast = def.fast || "";
-    slot.charge1 = def.charge1 || "";
-    slot.charge2 = def.charge2 || "";
+    if (state.noMovesMode) {
+      slot.fast = "";
+      slot.charge1 = "";
+      slot.charge2 = "";
+    } else {
+      slot.fast = def.fast || "";
+      slot.charge1 = def.charge1 || "";
+      slot.charge2 = def.charge2 || "";
+    }
     if (!slot.cp && slot.cp !== 0) slot.cp = "";
     renderPokemonSlots();
     currentSearchSlotIndex = null;
@@ -981,9 +1048,11 @@
     } else {
       historyReplaceSlotIndex = null;
     }
+    state.noMovesMode = false;
     loadSavedInputs();
     applyPartyJson(json);
     bindSheetForm();
+    updateSheetModeUI();
     renderPokemonSlots();
     showScreen("sheet");
   }

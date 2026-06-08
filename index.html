@@ -24,7 +24,10 @@
           </div>
           <div class="entrance-stack">
             <button type="button" class="btn-load-image" id="btn-load-image">画像を読み込む</button>
-            <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
+            <div class="entrance-secondary-row">
+              <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
+              <button type="button" class="btn-start-no-moves" id="btn-start-no-moves">わざなしで開始</button>
+            </div>
             <button type="button" class="btn-start-without" id="btn-load-json">jsonを読み込んで開始</button>
           </div>
         </div>
@@ -45,15 +48,15 @@
       <div class="sheet-scroll">
         <div class="sheet-form">
           <div class="form-row">
-            <label>ハンドルネーム</label>
+            <label id="label-handle">ハンドルネーム</label>
             <input type="text" id="input-handle" placeholder="ハンドルネーム" maxlength="50">
           </div>
           <div class="form-row">
-            <label>トレーナーネーム</label>
+            <label id="label-trainer">トレーナーネーム</label>
             <input type="text" id="input-trainer" placeholder="トレーナーネーム" maxlength="50">
           </div>
           <div class="form-row">
-            <label>フレンドコード</label>
+            <label id="label-friendcode">フレンドコード</label>
             <input type="tel" id="input-friendcode" placeholder="フレンドコード" inputmode="numeric" pattern="[0-9]*" maxlength="12">
           </div>
           <p class="sheet-note" id="sheet-note"></p>
@@ -69,6 +72,7 @@
           </div>
           <div class="json-copy-row">
             <button type="button" class="btn-copy-json" id="btn-copy-json">jsonコピー</button>
+            <button type="button" class="btn-clear-moves" id="btn-clear-moves">技を全消去</button>
           </div>
         </div>
       </div>
