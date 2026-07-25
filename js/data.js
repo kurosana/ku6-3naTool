@@ -172,6 +172,18 @@ const DataService = (function () {
     };
   }
 
+  /**
+   * 全わざリストから検索（kind: 0=通常技, 1=ゲージ技）
+   * ポケモン検索と同様、ひらがな入力でもカタカナ技名にヒットする。
+   */
+  function searchMoves(query, kind) {
+    const k = kind === 1 ? 1 : 0;
+    const pool = moveList.filter((m) => m.kind === k);
+    const q = toKatakana((query || "").trim().toLowerCase());
+    if (!q) return pool.slice(0, 100);
+    return pool.filter((m) => toKatakana(String(m.name || "").toLowerCase()).includes(q)).slice(0, 100);
+  }
+
   function getMoveInfo(moveName) {
     return moveList.find((m) => m.name === moveName);
   }
@@ -280,6 +292,8 @@ const DataService = (function () {
         if (owned) return owned;
       }
       if (all.indexOf(jp) >= 0) return jp;
+      // 習得リスト外でも move_list にあれば受理（技不具合の緊急登録の JSON 往復用）
+      if (getMoveInfo(jp)) return jp;
       return "";
     }
     return jp;
@@ -305,6 +319,7 @@ const DataService = (function () {
     getPokemonByName,
     searchPokemon,
     getMovesForPokemon,
+    searchMoves,
     getMoveInfo,
     getDefaultMoves,
     getTypeIconPath,

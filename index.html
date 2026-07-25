@@ -74,6 +74,13 @@
             <button type="button" class="btn-copy-json" id="btn-copy-json">jsonコピー</button>
             <button type="button" class="btn-clear-moves" id="btn-clear-moves">技を全消去</button>
           </div>
+          <div class="move-bug-row" id="move-bug-row">
+            <span class="move-bug-label">技不具合</span>
+            <button type="button" class="toggle-switch toggle-switch--quiet" id="toggle-move-bug" role="switch" aria-checked="false" aria-label="技不具合">
+              <span class="toggle-knob"></span>
+              <span class="toggle-label-text">OFF</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -155,6 +162,17 @@
         <button type="button" class="btn-close-overlay" id="btn-close-search">閉じる</button>
       </div>
       <div class="search-results" id="search-results"></div>
+    </div>
+  </div>
+
+  <!-- 全わざ検索オーバーレイ（技不具合トグルON時） -->
+  <div id="overlay-move-search" class="overlay" aria-hidden="true">
+    <div class="overlay-inner">
+      <div class="search-header">
+        <input type="search" id="search-move" placeholder="技名で検索" autocomplete="off">
+        <button type="button" class="btn-close-overlay" id="btn-close-move-search">閉じる</button>
+      </div>
+      <div class="search-results" id="move-search-results"></div>
     </div>
   </div>
 

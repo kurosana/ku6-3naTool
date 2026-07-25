@@ -15,9 +15,12 @@
   const HISTORY_THUMB_MAX_W = 400;
   const HISTORY_THUMB_JPEG_QUALITY = 0.85;
 
+  const ALL_MOVES_SENTINEL = "__ALL_MOVES__";
+
   let state = {
     recognitionAttempted: false,
     noMovesMode: false,
+    moveBugMode: false,
     handleName: "",
     trainerName: "",
     friendCode: "",
@@ -64,6 +67,8 @@
     history: $("screen-history"),
   };
   let currentSearchSlotIndex = null;
+  let currentMoveSearchSlotIndex = null;
+  let currentMoveSearchField = null;
   let searchTouchStartY = 0;
   let searchTouchStartX = 0;
   /** 履歴画面「このパーティを編集」から開いた場合のみ、上書き対象の配列インデックス。それ以外は null */
@@ -380,6 +385,13 @@
 
     const btnClearMoves = $("btn-clear-moves");
     if (btnClearMoves) btnClearMoves.hidden = !!state.noMovesMode;
+
+    const moveBugRow = $("move-bug-row");
+    if (moveBugRow) moveBugRow.hidden = !!state.noMovesMode;
+    if (state.noMovesMode && state.moveBugMode) {
+      state.moveBugMode = false;
+      updateMoveBugToggleUI();
+    }
   }
 
   function clearAllMoves() {
@@ -449,6 +461,28 @@
       }
       btnClearMoves.onclick = () => clearAllMoves();
     }
+
+    initMoveBugToggle();
+  }
+
+  function buildMoveSelectOptions(learnList, selected, includeAllMovesOption) {
+    const list = learnList || [];
+    const seen = {};
+    const parts = [];
+    // 習得リスト外の現在値（緊急登録技）を先頭に残す
+    if (selected && list.indexOf(selected) < 0) {
+      parts.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+      seen[selected] = true;
+    }
+    list.forEach((m) => {
+      if (!m || seen[m]) return;
+      seen[m] = true;
+      parts.push(`<option value="${escapeHtml(m)}" ${m === selected ? "selected" : ""}>${escapeHtml(m)}</option>`);
+    });
+    if (includeAllMovesOption) {
+      parts.push(`<option value="${ALL_MOVES_SENTINEL}">全わざリストから選択</option>`);
+    }
+    return parts.join("");
   }
 
   function renderPokemonSlots() {
@@ -471,10 +505,10 @@
         ? (picSrc ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${picSrc}" alt="" data-slot="${i}" data-field="img" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`)
         : (showQuestionMark ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">` : "");
       const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [] };
-      const fastOpts = (moves.fast || []).map((m) => `<option value="${escapeHtml(m)}" ${m === p.fast ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
-      const chargeList = moves.charge || [];
-      const charge1Opts = chargeList.map((m) => `<option value="${escapeHtml(m)}" ${m === p.charge1 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
-      const charge2Opts = chargeList.map((m) => `<option value="${escapeHtml(m)}" ${m === p.charge2 ? "selected" : ""}>${escapeHtml(m)}</option>`).join("");
+      const showAllMovesOpt = !!(state.moveBugMode && p.dexNo);
+      const fastOpts = buildMoveSelectOptions(moves.fast, p.fast, showAllMovesOpt);
+      const charge1Opts = buildMoveSelectOptions(moves.charge, p.charge1, showAllMovesOpt);
+      const charge2Opts = buildMoveSelectOptions(moves.charge, p.charge2, showAllMovesOpt);
 
       const movesBlock = state.noMovesMode ? "" : `
           <div class="slot-moves">
@@ -521,6 +555,12 @@
       } else if (field === "fast" || field === "charge1" || field === "charge2") {
         el.addEventListener("change", () => {
           const key = field === "fast" ? "fast" : field === "charge1" ? "charge1" : "charge2";
+          if (el.value === ALL_MOVES_SENTINEL) {
+            // センチネルは状態に入れず、直前の技に戻して全わざ検索を開く
+            el.value = state.pokemons[slotIndex][key] || "";
+            openMoveSearchOverlay(slotIndex, key);
+            return;
+          }
           state.pokemons[slotIndex][key] = el.value;
           updateTypeIcon(slotIndex, key, el.value);
           // 折り畳み表示スパンを短縮名で更新
@@ -666,10 +706,95 @@
     currentSearchSlotIndex = null;
   }
 
+  function openMoveSearchOverlay(slotIndex, field) {
+    currentMoveSearchSlotIndex = slotIndex;
+    currentMoveSearchField = field;
+    const overlay = $("overlay-move-search");
+    const results = $("move-search-results");
+    const searchInput = $("search-move");
+    if (!overlay || !results || !DataService) return;
+
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+    if (searchInput) {
+      searchInput.value = "";
+      searchInput.focus();
+    }
+
+    const kind = field === "fast" ? 0 : 1;
+
+    function runMoveSearch(q) {
+      const filtered = DataService.searchMoves(q, kind);
+      const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
+      results.innerHTML = filtered.map((m) => {
+        const typeName = m.type || "";
+        const iconPath = typeName ? DataService.getTypeIconPath(typeName) : "";
+        const imgHtml = iconPath
+          ? `<img src="${basePath.replace(/\/?$/, "/") + iconPath}" alt="">`
+          : `<span class="search-result-icon-placeholder"></span>`;
+        return `
+        <div class="search-result-item" data-move="${escapeHtml(m.name)}">
+          ${imgHtml}
+          <span>${escapeHtml(m.name)}</span>
+        </div>`;
+      }).join("");
+      results.querySelectorAll(".search-result-item").forEach((item) => {
+        const moveName = item.getAttribute("data-move");
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          selectMoveFromAllList(moveName);
+        });
+        item.addEventListener("touchstart", function (e) {
+          searchTouchStartX = e.touches[0].clientX;
+          searchTouchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        item.addEventListener("touchend", function (e) {
+          var dx = e.changedTouches[0].clientX - searchTouchStartX;
+          var dy = e.changedTouches[0].clientY - searchTouchStartY;
+          if (dx * dx + dy * dy < 225) {
+            e.preventDefault();
+            selectMoveFromAllList(moveName);
+          }
+        }, { passive: false });
+      });
+    }
+
+    if (searchInput) searchInput.oninput = () => runMoveSearch(searchInput.value);
+    runMoveSearch("");
+  }
+
+  function selectMoveFromAllList(moveName) {
+    if (currentMoveSearchSlotIndex == null || !currentMoveSearchField) return;
+    const slot = state.pokemons[currentMoveSearchSlotIndex];
+    if (!slot) return;
+    slot[currentMoveSearchField] = moveName || "";
+    renderPokemonSlots();
+    closeMoveSearchOverlay();
+  }
+
+  function closeMoveSearchOverlay() {
+    const overlay = $("overlay-move-search");
+    if (overlay) {
+      overlay.classList.remove("active");
+      overlay.setAttribute("aria-hidden", "true");
+    }
+    currentMoveSearchSlotIndex = null;
+    currentMoveSearchField = null;
+  }
+
   $("btn-close-search").addEventListener("click", closeSearchOverlay);
   $("search-pokemon").addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeSearchOverlay();
   });
+
+  const btnCloseMoveSearch = $("btn-close-move-search");
+  if (btnCloseMoveSearch) btnCloseMoveSearch.addEventListener("click", closeMoveSearchOverlay);
+  const searchMoveInput = $("search-move");
+  if (searchMoveInput) {
+    searchMoveInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMoveSearchOverlay();
+    });
+  }
 
   var btnClosePreview = document.getElementById("btn-close-preview");
   var overlayPreview = document.getElementById("overlay-preview");
@@ -1238,6 +1363,26 @@
       state.engOutput = !state.engOutput;
       updateEngToggleUI();
       saveInputs();
+    });
+  }
+
+  function updateMoveBugToggleUI() {
+    const btn = $("toggle-move-bug");
+    if (!btn) return;
+    btn.setAttribute("aria-checked", state.moveBugMode ? "true" : "false");
+    const lbl = btn.querySelector(".toggle-label-text");
+    if (lbl) lbl.textContent = state.moveBugMode ? "ON" : "OFF";
+  }
+
+  function initMoveBugToggle() {
+    updateMoveBugToggleUI();
+    const btn = $("toggle-move-bug");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      state.moveBugMode = !state.moveBugMode;
+      updateMoveBugToggleUI();
+      renderPokemonSlots();
     });
   }
 

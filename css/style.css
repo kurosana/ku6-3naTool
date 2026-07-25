@@ -660,6 +660,40 @@ body {
   background: var(--btn-secondary-hover);
 }
 
+/* 技不具合トグル（緊急用・控えめ表示） */
+.move-bug-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.15rem 0.25rem;
+}
+.move-bug-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.toggle-switch--quiet {
+  width: 3rem;
+  height: 1.65rem;
+  opacity: 0.85;
+}
+.toggle-switch--quiet .toggle-knob {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+.toggle-switch--quiet[aria-checked="true"] .toggle-knob {
+  left: calc(100% - 1.5rem);
+}
+.toggle-switch--quiet .toggle-label-text {
+  font-size: 0.65rem;
+  right: 0.3rem;
+}
+.toggle-switch--quiet[aria-checked="true"] .toggle-label-text {
+  left: 0.3rem;
+  right: auto;
+}
+
 /* わざなしモード: スロットを技欄なしでコンパクト表示 */
 #screen-sheet.sheet-no-moves .pokemon-slots {
   margin-top: 0.75rem;
@@ -869,6 +903,12 @@ body {
   height: 48px;
   object-fit: contain;
   flex-shrink: 0;
+}
+.search-result-icon-placeholder {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: inline-block;
 }
 .search-result-item span {
   font-size: 0.95rem;
