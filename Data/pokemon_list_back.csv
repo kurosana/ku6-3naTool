@@ -151,7 +151,7 @@
 100,ビリリダマ,Image/Match/100.png,Image/Pic/100.png,,,
 100-1,ビリリダマ(ヒスイのすがた),Image/Match/100-1.png,Image/Pic/100-1.png,,,
 101,マルマイン,Image/Match/101.png,Image/Pic/101.png,,,
-101-1,マルマイン(ヒスイのすがた),Image/Match/101-1.png,Image/Pic/101-1.png,,,
+101-1,マルマイン(ヒスイのすがた),Image/Match/101-1.png,Image/Pic/101-1.png,でんきショック,エナジーボール,ワイルドボルト
 102,タマタマ,Image/Match/102.png,Image/Pic/102.png,,,
 103,ナッシー,Image/Match/103.png,Image/Pic/103.png,,,
 103-1,ナッシー(アローラのすがた),Image/Match/103-1.png,Image/Pic/103-1.png,,,
@@ -306,7 +306,7 @@
 223,テッポウオ,Image/Match/223.png,Image/Pic/223.png,,,
 224,オクタン,Image/Match/224.png,Image/Pic/224.png,,,
 225,デリバード,Image/Match/225.png,Image/Pic/225.png,,,
-226,マンタイン,Image/Match/226.png,Image/Pic/226.png,,つばめがえし,みずのはどう
+226,マンタイン,Image/Match/226.png,Image/Pic/226.png,つばさでうつ,つばめがえし,みずのはどう
 227,エアームド,Image/Match/227.png,Image/Pic/227.png,はがねのつばさ,ゴッドバード,ブレイブバード
 228,デルビル,Image/Match/228.png,Image/Pic/228.png,,,
 229,ヘルガー,Image/Match/229.png,Image/Pic/229.png,,,
@@ -584,7 +584,7 @@
 460-1,メガユキノオー,Image/Match/460-1.png,Image/Pic/460-1.png,,,
 461,マニューラ,Image/Match/461.png,Image/Pic/461.png,,,
 462,ジバコイル,Image/Match/462.png,Image/Pic/462.png,ボルトチェンジ,ミラーショット,ワイルドボルト
-463,ベロベルト,Image/Match/463.png,Image/Pic/463.png,,,
+463,ベロベルト,Image/Match/463.png,Image/Pic/463.png,ころがる,のしかかり,シャドーボール
 464,ドサイドン,Image/Match/464.png,Image/Pic/464.png,,,
 465,モジャンボ,Image/Match/465.png,Image/Pic/465.png,,,
 466,エレキブル,Image/Match/466.png,Image/Pic/466.png,,,
@@ -1017,7 +1017,7 @@
 825,レドームシ,Image/Match/825.png,Image/Pic/825.png,,,
 826,イオルブ,Image/Match/826.png,Image/Pic/826.png,,,
 827,クスネ,Image/Match/827.png,Image/Pic/827.png,,,
-828,フォクスライ,Image/Match/828.png,Image/Pic/828.png,,,
+828,フォクスライ,Image/Match/828.png,Image/Pic/828.png,ふいうち,つじぎり,ここえるかぜ
 829,ヒメンカ,Image/Match/829.png,Image/Pic/829.png,,,
 830,ワタシラガ,Image/Match/830.png,Image/Pic/830.png,,,
 831,ウールー,Image/Match/831.png,Image/Pic/831.png,,,
@@ -1034,7 +1034,7 @@
 842,タルップル,Image/Match/842.png,Image/Pic/842.png,,,
 843,スナヘビ,Image/Match/843.png,Image/Pic/843.png,,,
 844,サダイジャ,Image/Match/844.png,Image/Pic/844.png,,,
-845,ウッウ,Image/Match/845.png,Image/Pic/845.png,,,
+845,ウッウ,Image/Match/845.png,Image/Pic/845.png,つつく,なみのり,そらをとぶ
 846,サシカマス,Image/Match/846.png,Image/Pic/846.png,,,
 847,カマスジョー,Image/Match/847.png,Image/Pic/847.png,,,
 848,エレズン,Image/Match/848.png,Image/Pic/848.png,,,

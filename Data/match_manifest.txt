@@ -83,6 +83,7 @@ Normal/357.png
 Normal/358.png
 Normal/36.png
 Normal/362.png
+Normal/364.png
 Normal/365.png
 Normal/372.png
 Normal/373.png
@@ -206,6 +207,7 @@ Normal/765.png
 Normal/768.png
 Normal/776.png
 Normal/777.png
+Normal/778.png
 Normal/779.png
 Normal/78-1.png
 Normal/783.png
@@ -217,9 +219,11 @@ Normal/80.png
 Normal/809.png
 Normal/820.png
 Normal/823.png
+Normal/828.png
 Normal/832.png
 Normal/838.png
 Normal/839.png
+Normal/845.png
 Normal/861.png
 Normal/862.png
 Normal/863.png
@@ -290,6 +294,7 @@ Shadow/340_S.png
 Shadow/344_S.png
 Shadow/346_S.png
 Shadow/356_S.png
+Shadow/364_S.png
 Shadow/373_S.png
 Shadow/376_S.png
 Shadow/38-1_S.png
