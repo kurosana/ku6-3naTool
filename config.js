@@ -10,7 +10,7 @@ const CONFIG = {
   debugRecognition: 0,
 
   // ========== バージョン表記 ==========
-  appVersion: "v2.3.1",
+  appVersion: "v2.3.3",
   // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
   appReleaseNotes: "出力履歴機能の追加・ガマゲロゲなど新強化対応",
 
