@@ -2,64 +2,161 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>チームシート作成</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ku6-3naツール改</title>
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="favicon.png">
+  <meta name="theme-color" content="#2dd4bf">
+  <meta name="description" content="Ku6-3naToolで6-3見せ合いシートを作れます">
+  <meta property="og:title" content="Ku6-3naツール改">
+  <meta property="og:description" content="Ku6-3naToolで6-3見せ合いシートを作っています">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://kurosana.github.io/ku6-3naTool/">
+  <meta property="og:image" content="https://kurosana.github.io/ku6-3naTool/Image/ogp.png">
+  <meta property="og:image:width" content="1920">
+  <meta property="og:image:height" content="1080">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ku6-3naツール改">
+  <meta name="twitter:description" content="Ku6-3naToolで6-3見せ合いシートを作っています">
+  <meta name="twitter:image" content="https://kurosana.github.io/ku6-3naTool/Image/ogp.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/anim.css">
 </head>
 <body>
+  <div class="bg-mega" aria-hidden="true">
+    <svg viewBox="0 0 162 205" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mega-rainbow" x1="22%" y1="0%" x2="78%" y2="100%">
+          <stop offset="0%" stop-color="#ff8aa0"/>
+          <stop offset="16%" stop-color="#ffc08a"/>
+          <stop offset="32%" stop-color="#ffe07a"/>
+          <stop offset="48%" stop-color="#9ee08a"/>
+          <stop offset="64%" stop-color="#7ad4ee"/>
+          <stop offset="80%" stop-color="#7a96f0"/>
+          <stop offset="100%" stop-color="#d48ae8"/>
+        </linearGradient>
+        <filter id="mega-soft" x="-18%" y="-18%" width="136%" height="136%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="0.9" result="smooth"/>
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="glow"/>
+          <feMerge>
+            <feMergeNode in="glow"/>
+            <feMergeNode in="smooth"/>
+          </feMerge>
+        </filter>
+      </defs>
+      <path fill="url(#mega-rainbow)" fill-rule="evenodd" filter="url(#mega-soft)" d="M90 5L93 5L93 7L92 8L92 21L93 22L93 29L94 30L94 34L95 35L96 40L97 41L102 52L107 58L107 59L110 62L110 63L117 70L118 70L119 71L119 72L120 73L121 73L136 88L136 89L140 93L140 94L146 102L146 104L149 109L149 111L150 112L150 114L151 115L151 118L152 119L152 123L153 124L153 128L152 129L152 134L151 135L151 138L149 141L149 143L148 144L145 151L143 153L143 154L141 156L141 157L129 169L128 169L125 172L124 172L121 175L120 175L115 179L112 180L110 182L107 183L105 185L104 185L87 194L85 194L82 196L80 196L79 197L78 197L77 198L75 198L74 199L71 199L71 181L70 180L70 175L69 174L69 172L68 171L68 168L67 167L66 162L65 161L62 154L60 152L59 149L46 136L45 136L41 132L40 132L36 128L35 128L27 120L27 119L22 114L22 113L16 106L14 101L11 97L11 95L10 94L10 92L9 91L9 88L8 87L8 84L7 83L7 73L8 72L8 69L9 68L9 65L11 62L11 60L12 59L14 54L17 51L17 50L23 44L23 43L26 40L27 40L37 31L38 31L46 25L49 24L51 22L52 22L69 13L71 13L72 12L73 12L76 10L78 10L81 8L83 8L84 7L89 6Z M72 30L74 30L76 32L76 33L77 34L77 36L79 39L79 41L82 46L82 48L85 53L85 56L86 57L85 58L81 58L77 55L76 55L75 54L70 52L68 50L65 49L63 47L58 45L55 42L55 40L56 39L57 39L59 37L62 36L64 34L71 31Z M38 54L40 54L41 55L44 56L46 58L49 59L51 61L54 62L56 64L61 66L63 68L64 68L65 69L66 69L67 70L68 70L69 71L70 71L71 72L72 72L73 73L74 73L75 74L76 74L77 75L78 75L79 76L80 76L81 77L82 77L93 83L95 83L100 86L102 86L107 89L109 89L110 90L117 93L123 98L123 99L129 107L129 110L128 111L126 111L125 110L122 110L121 109L119 109L118 108L116 108L115 107L113 107L112 106L110 106L109 105L106 105L101 102L99 102L98 101L93 100L88 97L86 97L85 96L84 96L83 95L81 95L76 92L74 92L73 91L72 91L71 90L64 87L62 85L60 85L56 82L55 82L54 81L47 78L41 73L40 73L36 70L35 70L30 65L30 62L31 61L31 60L36 55L37 55Z M27 85L28 85L29 86L30 86L31 87L32 87L33 88L34 88L35 89L42 92L44 94L45 94L46 95L47 95L48 96L49 96L50 97L51 97L52 98L53 98L54 99L55 99L56 100L57 100L58 101L59 101L60 102L61 102L62 103L63 103L74 109L76 109L79 111L81 111L92 117L97 118L98 119L99 119L100 120L102 120L107 123L110 123L113 125L115 125L116 126L118 126L119 127L121 127L122 128L125 128L126 129L128 129L129 130L131 130L132 131L133 131L134 132L134 137L133 138L133 139L130 142L130 143L129 143L128 144L124 144L123 143L122 143L121 142L119 142L116 140L114 140L113 139L111 139L110 138L105 137L100 134L98 134L95 132L93 132L90 130L88 130L81 126L79 126L74 123L72 123L68 120L66 120L65 119L64 119L63 118L62 118L61 117L60 117L59 116L58 116L57 115L50 112L48 110L47 110L46 109L39 106L37 104L34 103L29 98L29 97L26 92L26 89L25 88L26 87L26 86Z M74 143L78 143L79 144L80 144L81 145L83 145L88 148L90 148L93 150L95 150L96 151L98 151L103 154L105 154L110 157L110 160L105 165L104 165L99 169L98 169L91 173L89 173L88 174L84 174L82 171L82 167L80 164L79 159L77 156L77 154L76 153L76 151L73 146L73 144Z"/>
+    </svg>
+  </div>
   <div id="app">
-    <!-- エントランス画面 -->
-    <section id="screen-entrance" class="screen active">
+    <!-- トップページ -->
+    <section id="screen-top" class="screen active">
+      <button type="button" class="btn-role btn-secondary btn-version" id="btn-to-version">バージョン情報</button>
+      <div class="top-scroll">
+        <div class="top-hero">
+          <div class="top-hero-logo-wrap">
+            <img class="top-hero-logo" src="Image/タイトルロゴ.png" alt="Ku6-3naツール改" width="1000" height="250">
+          </div>
+          <img class="top-hero-favicon" src="favicon.png" alt="" width="88" height="88">
+          <div class="top-hero-cta">
+            <button type="button" class="btn-role btn-primary btn-hero-large" id="btn-to-menu">6-3シート作成</button>
+          </div>
+          <div class="top-hero-invite">
+            <a class="top-scroll-cue" href="#top-guide" aria-label="使い方へスクロール">
+              <span>サイトの使い方</span>
+              <span class="top-scroll-chevron" aria-hidden="true"></span>
+            </a>
+          </div>
+        </div>
+
+        <div class="top-guide" id="top-guide">
+          <h2 class="section-title">サイトの使い方</h2>
+          <div id="guide-sections"></div>
+          <p class="top-contact" data-reveal>不具合・ご意見は クロサナ(X:<a href="https://x.com/kurosana309637" target="_blank" rel="noopener noreferrer">@kurosana309637</a>) まで</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- バージョン情報 -->
+    <section id="screen-version" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-version">戻る</button>
+        <h1 class="page-title">バージョン情報</h1>
+        <span class="page-header-spacer"></span>
+      </header>
+      <div class="version-main screen-enter">
+        <p class="version-current">現在のバージョン <strong id="version-current-num"></strong></p>
+        <div id="version-changelog"></div>
+      </div>
+    </section>
+
+    <!-- メニュー画面 -->
+    <section id="screen-menu" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-top">戻る</button>
+        <h1 class="page-title">メニュー</h1>
+        <span class="page-header-spacer"></span>
+      </header>
       <div class="app-version-wrap" id="app-version-wrap">
         <span class="app-version" id="app-version"></span>
         <span class="app-version app-release-notes" id="app-release-notes" hidden></span>
       </div>
-      <div class="entrance-main">
-        <div class="entrance-centered-block">
-          <p class="entrance-main-comment" id="entrance-main-comment" hidden></p>
-          <div class="entrance-past-row">
-            <button type="button" class="btn-past" id="btn-past">過去パーティ呼び出し</button>
+      <div class="menu-main screen-enter">
+        <div class="menu-centered-block">
+          <div class="menu-past-row">
+            <button type="button" class="btn-role btn-secondary btn-past" id="btn-slots">保存データから作成</button>
           </div>
-          <div class="entrance-stack">
-            <button type="button" class="btn-load-image" id="btn-load-image">画像を読み込む</button>
-            <div class="entrance-secondary-row">
-              <button type="button" class="btn-start-without" id="btn-start-without">画像認識なしで開始</button>
-              <button type="button" class="btn-start-no-moves" id="btn-start-no-moves">わざなしで開始</button>
-            </div>
-            <button type="button" class="btn-start-without" id="btn-load-json">jsonを読み込んで開始</button>
+          <button type="button" class="btn-role btn-primary btn-load-image" id="btn-new-party">新しく作成</button>
+          <div class="menu-rest">
+            <button type="button" class="btn-role btn-secondary btn-menu-secondary" id="btn-battle-logs">対戦ログ作成</button>
+            <a class="btn-role btn-share-x" id="btn-share-x" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.74l7.726-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              Xで共有
+            </a>
           </div>
         </div>
       </div>
-      <p class="explanation" id="entrance-explanation"></p>
-      <input type="file" id="input-image" accept="image/*" hidden>
     </section>
 
-    <!-- パーティシート設定画面 -->
+    <!-- パーティシート作成 -->
     <section id="screen-sheet" class="screen">
       <header class="sheet-header">
-        <button type="button" class="btn-back" id="btn-back-sheet">戻る</button>
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-sheet">戻る</button>
         <div class="sheet-header-actions">
-          <button type="button" class="btn-preview" id="btn-preview"><span>プレビュー</span><span>表示</span></button>
-          <button type="button" class="btn-output" id="btn-output"><span>画像</span><span>出力</span></button>
+          <button type="button" class="btn-role btn-primary btn-output" id="btn-output">画像出力</button>
         </div>
       </header>
       <div class="sheet-scroll">
-        <div class="sheet-form">
-          <div class="form-row">
-            <label id="label-handle">ハンドルネーム</label>
-            <input type="text" id="input-handle" placeholder="ハンドルネーム" maxlength="50">
+        <div class="sheet-form screen-enter">
+          <div class="sheet-top">
+            <div class="form-row form-row--recall">
+              <label id="label-handle">ハンドルネーム</label>
+              <div class="form-input-group">
+                <input type="text" id="input-handle" placeholder="ハンドルネーム" maxlength="50">
+                <button type="button" class="btn-role btn-secondary btn-recall" data-recall="handleName">呼出</button>
+              </div>
+            </div>
+            <div class="form-row form-row--recall">
+              <label id="label-trainer">トレーナーネーム</label>
+              <div class="form-input-group">
+                <input type="text" id="input-trainer" placeholder="トレーナーネーム" maxlength="50">
+                <button type="button" class="btn-role btn-secondary btn-recall" data-recall="trainerName">呼出</button>
+              </div>
+            </div>
+            <div class="form-row form-row--recall">
+              <label id="label-friendcode">フレンドコード</label>
+              <div class="form-input-group">
+                <input type="tel" id="input-friendcode" placeholder="フレンドコード" inputmode="numeric" pattern="[0-9]*" maxlength="12">
+                <button type="button" class="btn-role btn-secondary btn-recall" data-recall="friendCode">呼出</button>
+              </div>
+            </div>
+            <div class="sheet-scan-row">
+              <button type="button" class="btn-role btn-secondary btn-scan-entry" id="btn-to-scan">画像認識で入力</button>
+            </div>
           </div>
-          <div class="form-row">
-            <label id="label-trainer">トレーナーネーム</label>
-            <input type="text" id="input-trainer" placeholder="トレーナーネーム" maxlength="50">
-          </div>
-          <div class="form-row">
-            <label id="label-friendcode">フレンドコード</label>
-            <input type="tel" id="input-friendcode" placeholder="フレンドコード" inputmode="numeric" pattern="[0-9]*" maxlength="12">
-          </div>
-          <p class="sheet-note" id="sheet-note"></p>
+          <div class="pokemon-slots" id="pokemon-slots"></div>
           <div class="eng-output-row">
             <span class="eng-output-label">英語で出力</span>
             <button type="button" class="toggle-switch" id="toggle-eng-output" role="switch" aria-checked="false">
@@ -67,12 +164,9 @@
               <span class="toggle-label-text">OFF</span>
             </button>
           </div>
-          <div class="pokemon-slots" id="pokemon-slots">
-            <!-- 6スロットは JS で生成 -->
-          </div>
           <div class="json-copy-row">
-            <button type="button" class="btn-copy-json" id="btn-copy-json">jsonコピー</button>
-            <button type="button" class="btn-clear-moves" id="btn-clear-moves">技を全消去</button>
+            <button type="button" class="btn-role btn-secondary btn-copy-json" id="btn-copy-json">jsonコピー</button>
+            <button type="button" class="btn-role btn-secondary btn-clear-moves" id="btn-clear-moves">技を全消去</button>
           </div>
           <div class="move-bug-row" id="move-bug-row">
             <span class="move-bug-label">技不具合</span>
@@ -85,38 +179,158 @@
       </div>
     </section>
 
-    <!-- 過去の画像画面 -->
-    <section id="screen-history" class="screen">
-      <header class="sheet-header">
-        <button type="button" class="btn-back" id="btn-back-history">戻る</button>
+    <!-- 画像認識 -->
+    <section id="screen-scan" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-scan">戻る</button>
+        <h1 class="page-title">画像認識</h1>
+        <span class="page-header-spacer"></span>
       </header>
-      <div class="history-list" id="history-list"></div>
+      <div class="scan-main screen-enter">
+        <div class="scan-example">
+          <p>右のような6匹のパーティタグのスクリーンショットを読み込ませてください。</p>
+          <button type="button" class="scan-example-thumb" id="btn-scan-example" aria-label="見本画像を拡大">
+            <img src="Image/ScreenshotExample.png" alt="6匹のパーティタグの見本">
+          </button>
+        </div>
+        <button type="button" class="btn-role btn-primary btn-load-image" id="btn-load-image">画像を読み込む</button>
+        <div class="scan-help" id="scan-help-sections"></div>
+      </div>
+      <input type="file" id="input-image" accept="image/*" hidden>
+    </section>
+
+    <!-- 保存スロット -->
+    <section id="screen-slots" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-slots">戻る</button>
+        <h1 class="page-title">保存データ</h1>
+        <div class="page-header-actions">
+          <button type="button" class="btn-role btn-secondary btn-header-io" id="btn-export-data">エクスポート</button>
+          <button type="button" class="btn-role btn-secondary btn-header-io" id="btn-import-data">インポート</button>
+        </div>
+      </header>
+      <p class="data-cache-note">保存データは端末のブラウザキャッシュに保存されています。<br>キャッシュが消えるとデータは消えてしまうため、必要に応じて右上のインポート・エクスポートをご利用ください</p>
+      <div class="data-slot-list" id="slot-list"></div>
+      <input type="file" id="input-backup" accept="application/json,.json" hidden>
+    </section>
+
+    <!-- 対戦ログ一覧 -->
+    <section id="screen-log-list" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-log-list">戻る</button>
+        <h1 class="page-title">対戦ログ</h1>
+        <span class="page-header-spacer"></span>
+      </header>
+      <div class="log-list-actions">
+        <button type="button" class="btn-role btn-primary" id="btn-new-log">新規対戦ログ</button>
+      </div>
+      <div class="data-slot-list" id="log-list"></div>
+    </section>
+
+    <!-- 対戦ログ編集 -->
+    <section id="screen-log-edit" class="screen">
+      <header class="sheet-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-log-edit">戻る</button>
+        <div class="sheet-header-actions">
+          <button type="button" class="btn-role btn-primary btn-output" id="btn-save-log">保存</button>
+        </div>
+      </header>
+      <div class="sheet-scroll">
+        <div class="sheet-form screen-enter">
+          <div class="form-row">
+            <label>対戦相手の名前</label>
+            <input type="text" id="input-opponent" placeholder="対戦相手の名前" maxlength="50">
+          </div>
+          <div class="pokemon-slots" id="log-pokemon-slots"></div>
+          <div class="json-copy-row">
+            <button type="button" class="btn-role btn-secondary btn-clear-moves" id="btn-clear-moves-log">技を全消去</button>
+          </div>
+          <div class="move-bug-row">
+            <span class="move-bug-label">技不具合</span>
+            <button type="button" class="toggle-switch toggle-switch--quiet" id="toggle-move-bug-log" role="switch" aria-checked="false" aria-label="技不具合">
+              <span class="toggle-knob"></span>
+              <span class="toggle-label-text">OFF</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 
-  <!-- プレビューオーバーレイ -->
-  <div id="overlay-preview" class="overlay" aria-hidden="true">
-    <div class="preview-overlay-backdrop"></div>
-    <div class="preview-overlay-box">
-      <button type="button" class="btn-close-preview" id="btn-close-preview" aria-label="閉じる">×</button>
-      <p class="preview-overlay-note">※画像を取得する場合は「画像出力」を行ってください</p>
-      <div id="preview-overlay-content" class="preview-overlay-content"></div>
-    </div>
+  <!-- 見本画像拡大 -->
+  <div id="overlay-scan-example" class="overlay overlay-scan-example" aria-hidden="true">
+    <div class="dialog-backdrop" id="scan-example-backdrop"></div>
+    <img src="Image/ScreenshotExample.png" alt="6匹のパーティタグの見本">
   </div>
 
-  <!-- 画像保存オーバーレイ（iframe内モバイル用） -->
-  <div id="overlay-save-image" class="overlay" aria-hidden="true">
-    <div class="preview-overlay-backdrop" id="save-image-backdrop"></div>
+  <!-- 画像出力オーバーレイ -->
+  <div id="overlay-output" class="overlay" aria-hidden="true">
+    <div class="preview-overlay-backdrop" id="output-backdrop"></div>
     <div class="preview-overlay-box">
-      <button type="button" class="btn-close-preview" id="btn-close-save-image" aria-label="閉じる">×</button>
-      <p class="preview-overlay-note">長押し（または2本指タップ）→「写真に追加」で保存できます</p>
-      <div class="preview-overlay-content">
-        <img id="save-image-img" src="" alt="チームシート" style="display:block;max-width:100%;height:auto;">
+      <button type="button" class="btn-close-preview" id="btn-close-output" aria-label="閉じる">×</button>
+      <p class="preview-overlay-note">画像を長押しして保存してください</p>
+      <div id="output-overlay-content" class="preview-overlay-content"></div>
+      <div class="output-actions">
+        <button type="button" class="btn-role btn-primary" id="btn-save-to-slot">データスロットに保存</button>
+        <button type="button" class="btn-role btn-primary" id="btn-download-image">画像保存</button>
       </div>
     </div>
   </div>
 
-  <!-- 処理中オーバーレイ（画像認識など） -->
+  <!-- スロット選択 -->
+  <div id="overlay-slot-picker" class="overlay overlay-dialog" aria-hidden="true">
+    <div class="dialog-backdrop" id="slot-picker-backdrop"></div>
+    <div class="dialog-box">
+      <p class="dialog-title">保存先スロットを選択</p>
+      <div class="slot-picker-grid" id="slot-picker-grid"></div>
+      <button type="button" class="btn-role btn-secondary dialog-cancel" id="btn-slot-picker-cancel">戻る</button>
+    </div>
+  </div>
+
+  <!-- 上書き確認 -->
+  <div id="overlay-slot-confirm" class="overlay overlay-dialog overlay-dialog--top" aria-hidden="true">
+    <div class="dialog-backdrop" id="slot-confirm-backdrop"></div>
+    <div class="dialog-box">
+      <p class="dialog-title">上書きしますがよろしいですか？</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-role btn-secondary" id="btn-slot-confirm-back">戻る</button>
+        <button type="button" class="btn-role btn-primary" id="btn-slot-confirm-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 名前編集 -->
+  <div id="overlay-name-edit" class="overlay overlay-dialog" aria-hidden="true">
+    <div class="dialog-backdrop" id="name-edit-backdrop"></div>
+    <div class="dialog-box">
+      <p class="dialog-title">パーティ名</p>
+      <input type="text" class="dialog-input" id="name-edit-input" maxlength="30" placeholder="パーティ名">
+      <div class="dialog-actions">
+        <button type="button" class="btn-role btn-secondary" id="btn-name-edit-cancel">戻る</button>
+        <button type="button" class="btn-role btn-primary" id="btn-name-edit-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未保存確認 -->
+  <div id="overlay-unsaved" class="overlay overlay-dialog" aria-hidden="true">
+    <div class="dialog-backdrop" id="unsaved-backdrop"></div>
+    <div class="dialog-box">
+      <p class="dialog-title" id="unsaved-message">変更を保存しますか？</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-role btn-secondary" id="btn-unsaved-discard">保存しない</button>
+        <button type="button" class="btn-role btn-primary" id="btn-unsaved-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 呼出プルダウン -->
+  <div id="overlay-recall" class="overlay-recall" aria-hidden="true">
+    <div class="recall-backdrop" id="recall-backdrop"></div>
+    <div class="recall-menu" id="recall-menu"></div>
+  </div>
+
+  <!-- 処理中 -->
   <div id="overlay-progress" class="overlay overlay-progress" aria-hidden="true">
     <div class="progress-overlay-backdrop"></div>
     <div class="progress-overlay-box">
@@ -129,7 +343,7 @@
     </div>
   </div>
 
-  <!-- 画像認識デバッグオーバーレイ（debugRecognition: 1 のときのみ表示） -->
+  <!-- デバッグ -->
   <div id="overlay-debug-recognition" class="overlay overlay-debug" aria-hidden="true">
     <div class="debug-overlay-backdrop"></div>
     <div class="debug-overlay-box">
@@ -144,33 +358,34 @@
     </div>
   </div>
 
-  <!-- JSON読み込みエラーオーバーレイ -->
+  <!-- JSONエラー -->
   <div id="overlay-json-error" class="overlay overlay-json-error" aria-hidden="true">
     <div class="json-error-backdrop"></div>
     <div class="json-error-box">
       <p class="json-error-title">jsonを読み込めませんでした</p>
       <p class="json-error-message" id="json-error-message">クリップボードに有効なパーティjsonが見つかりません。</p>
-      <button type="button" class="btn-json-error-ok" id="btn-json-error-ok">OK</button>
+      <button type="button" class="btn-role btn-primary btn-json-error-ok" id="btn-json-error-ok">OK</button>
     </div>
   </div>
 
-  <!-- ポケモン検索オーバーレイ -->
+  <!-- ポケモン検索 -->
   <div id="overlay-search" class="overlay" aria-hidden="true">
     <div class="overlay-inner">
       <div class="search-header">
         <input type="search" id="search-pokemon" placeholder="ポケモン名で検索" autocomplete="off">
-        <button type="button" class="btn-close-overlay" id="btn-close-search">閉じる</button>
+        <button type="button" class="btn-role btn-secondary btn-close-overlay" id="btn-close-search">閉じる</button>
       </div>
+      <p class="search-hint">保存パーティや対戦ログに記録されているポケモンを優先表示する機能があります</p>
       <div class="search-results" id="search-results"></div>
     </div>
   </div>
 
-  <!-- 全わざ検索オーバーレイ（技不具合トグルON時） -->
+  <!-- 全わざ検索 -->
   <div id="overlay-move-search" class="overlay" aria-hidden="true">
     <div class="overlay-inner">
       <div class="search-header">
         <input type="search" id="search-move" placeholder="技名で検索" autocomplete="off">
-        <button type="button" class="btn-close-overlay" id="btn-close-move-search">閉じる</button>
+        <button type="button" class="btn-role btn-secondary btn-close-overlay" id="btn-close-move-search">閉じる</button>
       </div>
       <div class="search-results" id="move-search-results"></div>
     </div>
@@ -178,9 +393,11 @@
 
   <script src="config.js"></script>
   <script src="debug.js" onerror="void 0"></script>
+  <script src="js/storage.js"></script>
   <script src="js/data.js"></script>
   <script src="js/recognition.js"></script>
   <script src="js/sheet-render.js"></script>
+  <script src="js/anim.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

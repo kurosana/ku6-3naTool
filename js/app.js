@@ -1,31 +1,64 @@
 /**
- * チームシートツール - メインアプリ
- * 画面遷移・フォーム・プレビュー・localStorage・過去画像
+ * チームシートツール v3.0 - メインアプリ
  */
 
 (function () {
-  const STORAGE_KEYS = {
-    handleName: "teamSheet_handleName",
-    trainerName: "teamSheet_trainerName",
-    friendCode: "teamSheet_friendCode",
-    history: "teamSheet_history",
-    engOutput: "teamSheet_engOutput",
-  };
-  const MAX_HISTORY = 3;
-  const HISTORY_THUMB_MAX_W = 400;
-  const HISTORY_THUMB_JPEG_QUALITY = 0.85;
-
   const ALL_MOVES_SENTINEL = "__ALL_MOVES__";
+
+  const $ = (id) => document.getElementById(id);
+
+  const screens = {
+    top: $("screen-top"),
+    menu: $("screen-menu"),
+    sheet: $("screen-sheet"),
+    scan: $("screen-scan"),
+    slots: $("screen-slots"),
+    logList: $("screen-log-list"),
+    logEdit: $("screen-log-edit"),
+    version: $("screen-version"),
+  };
 
   let state = {
     recognitionAttempted: false,
-    noMovesMode: false,
     moveBugMode: false,
     handleName: "",
     trainerName: "",
     friendCode: "",
     engOutput: false,
-    pokemons: Array(6).fill(null).map(() => ({
+    pokemons: emptyPokemons(),
+  };
+
+  let logState = {
+    id: null,
+    opponent: "",
+    moveBugMode: false,
+    pokemons: emptyPokemons(),
+    dirty: false,
+  };
+
+  let activeSlotIndex = null;
+  let sheetOrigin = "menu";
+  let sheetDirty = false;
+  let pendingSlotSaveIndex = null;
+  let outputBlob = null;
+  let outputBlobUrl = null;
+
+  let currentSearchSlotIndex = null;
+  let currentSearchContainerId = "pokemon-slots";
+  let currentMoveSearchSlotIndex = null;
+  let currentMoveSearchField = null;
+  let currentMoveSearchContainerId = "pokemon-slots";
+  let searchTouchStartY = 0;
+  let searchTouchStartX = 0;
+  let slotTouchStartX = 0;
+  let slotTouchStartY = 0;
+
+  let unsavedCallback = null;
+  let nameEditSlotIndex = null;
+  let recallField = null;
+
+  function emptyPokemons() {
+    return Array(6).fill(null).map(() => ({
       dexNo: null,
       name: null,
       cp: "",
@@ -35,445 +68,124 @@
       charge1: "",
       charge2: "",
       third: "",
-    })),
-  };
+    }));
+  }
 
-  const $ = (id) => document.getElementById(id);
+  function showScreen(name) {
+    Object.keys(screens).forEach((k) => {
+      if (screens[k]) screens[k].classList.toggle("active", k === name);
+    });
+    const active = screens[name];
+    if (active) {
+      const enter = active.querySelector(".screen-enter");
+      if (enter) {
+        enter.classList.remove("screen-enter");
+        void enter.offsetWidth;
+        enter.classList.add("screen-enter");
+      }
+    }
+    if (name === "top" && window.AnimService) {
+      window.AnimService.initRevealObserver();
+    }
+  }
 
-  // ─── 進捗オーバーレイ共通ヘルパー ──────────────────────────────
   function showProgress() {
-    const el = document.getElementById("overlay-progress");
+    const el = $("overlay-progress");
     if (el) { el.classList.add("active"); el.setAttribute("aria-hidden", "false"); }
   }
   function hideProgress() {
-    const el = document.getElementById("overlay-progress");
+    const el = $("overlay-progress");
     if (el) { el.classList.remove("active"); el.setAttribute("aria-hidden", "true"); }
-    const bar = document.getElementById("progress-overlay-bar");
-    const txt = document.getElementById("progress-overlay-text");
+    const bar = $("progress-overlay-bar");
+    const txt = $("progress-overlay-text");
     if (bar) bar.style.width = "0%";
     if (txt) txt.textContent = "0% 完了";
   }
   function setProgress(percent) {
     const p = Math.min(100, Math.max(0, Math.round(percent)));
-    const bar = document.getElementById("progress-overlay-bar");
-    const txt = document.getElementById("progress-overlay-text");
+    const bar = $("progress-overlay-bar");
+    const txt = $("progress-overlay-text");
     if (bar) bar.style.width = p + "%";
     if (txt) txt.textContent = p + "% 完了";
   }
-  // ───────────────────────────────────────────────────────────────
-
-  const screens = {
-    entrance: $("screen-entrance"),
-    sheet: $("screen-sheet"),
-    history: $("screen-history"),
-  };
-  let currentSearchSlotIndex = null;
-  let currentMoveSearchSlotIndex = null;
-  let currentMoveSearchField = null;
-  let searchTouchStartY = 0;
-  let searchTouchStartX = 0;
-  /** 履歴画面「このパーティを編集」から開いた場合のみ、上書き対象の配列インデックス。それ以外は null */
-  let historyReplaceSlotIndex = null;
-
-  function showScreen(name) {
-    Object.keys(screens).forEach((k) => {
-      screens[k].classList.toggle("active", k === name);
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
     });
+  }
+  function beginRecognitionProgress() {
+    showProgress();
+    setProgress(0);
+    const hint = $("progress-overlay-hint");
+    if (hint) {
+      hint.textContent = (CONFIG && CONFIG.labelRecognitionHint) || "";
+      hint.setAttribute("aria-hidden", hint.textContent ? "false" : "true");
+    }
+    const hint2 = $("progress-overlay-hint2");
+    if (hint2) {
+      const t2 = (CONFIG && CONFIG.labelRecognitionHint2) || "";
+      hint2.textContent = t2;
+      hint2.setAttribute("aria-hidden", t2 ? "false" : "true");
+    }
+  }
+  function endRecognitionProgress() {
+    const hint = $("progress-overlay-hint");
+    const hint2 = $("progress-overlay-hint2");
+    if (hint) hint.setAttribute("aria-hidden", "true");
+    if (hint2) hint2.setAttribute("aria-hidden", "true");
+    hideProgress();
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return "";
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
   }
 
   function loadSavedInputs() {
-    try {
-      if (state.noMovesMode) {
-        state.handleName = "";
-        state.trainerName = "";
-        state.friendCode = "";
-      } else {
-        state.handleName = localStorage.getItem(STORAGE_KEYS.handleName) || "";
-        state.trainerName = localStorage.getItem(STORAGE_KEYS.trainerName) || "";
-        state.friendCode = localStorage.getItem(STORAGE_KEYS.friendCode) || "";
+    state.engOutput = StorageService.getEngOutput();
+  }
+  function saveEngOutput() {
+    StorageService.setEngOutput(state.engOutput);
+  }
+
+  function bindTouchSelect(el, onSelect) {
+    el.addEventListener("click", (e) => { e.preventDefault(); onSelect(); });
+    el.addEventListener("touchstart", (e) => {
+      searchTouchStartX = e.touches[0].clientX;
+      searchTouchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    el.addEventListener("touchend", (e) => {
+      const dx = e.changedTouches[0].clientX - searchTouchStartX;
+      const dy = e.changedTouches[0].clientY - searchTouchStartY;
+      if (dx * dx + dy * dy < 225) {
+        e.preventDefault();
+        onSelect();
       }
-      state.engOutput = localStorage.getItem(STORAGE_KEYS.engOutput) === "1";
-    } catch (_) {}
+    }, { passive: false });
   }
 
-  function saveInputs() {
-    try {
-      if (!state.noMovesMode) {
-        localStorage.setItem(STORAGE_KEYS.handleName, state.handleName);
-        localStorage.setItem(STORAGE_KEYS.trainerName, state.trainerName);
-        localStorage.setItem(STORAGE_KEYS.friendCode, state.friendCode);
+  function bindSlotTouch(el, onTap) {
+    el.addEventListener("click", onTap);
+    el.addEventListener("touchstart", (e) => {
+      slotTouchStartX = e.touches[0].clientX;
+      slotTouchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    el.addEventListener("touchend", (e) => {
+      const dx = e.changedTouches[0].clientX - slotTouchStartX;
+      const dy = e.changedTouches[0].clientY - slotTouchStartY;
+      if (dx * dx + dy * dy < 225) {
+        e.preventDefault();
+        onTap();
       }
-      localStorage.setItem(STORAGE_KEYS.engOutput, state.engOutput ? "1" : "0");
-    } catch (_) {}
-  }
-
-  function loadHistory() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.history);
-      if (!raw) return [];
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr.slice(0, MAX_HISTORY) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function saveHistory(list) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(list.slice(0, MAX_HISTORY)));
-      return true;
-    } catch (e) {
-      console.error("[履歴] saveHistory failed:", e && e.name, e && e.message, e);
-      return false;
-    }
-  }
-
-  /** 履歴用サムネイル（localStorage 容量対策: フル PNG ではなく JPEG 縮小版） */
-  async function createHistoryDataUrl(blob) {
-    const previewCanvas = document.querySelector("#preview-overlay-content canvas");
-    if (previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0) {
-      try {
-        return previewCanvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
-      } catch (_) { /* フル blob から生成 */ }
-    }
-
-    const maxW = HISTORY_THUMB_MAX_W;
-    if (typeof createImageBitmap === "function") {
-      try {
-        const bitmap = await createImageBitmap(blob);
-        const scale = Math.min(1, maxW / bitmap.width);
-        const w = Math.max(1, Math.round(bitmap.width * scale));
-        const h = Math.max(1, Math.round(bitmap.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-        bitmap.close();
-        return canvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
-      } catch (_) { /* Image フォールバック */ }
-    }
-
-    const url = URL.createObjectURL(blob);
-    try {
-      const img = await new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error("thumb load failed"));
-        el.src = url;
-      });
-      const scale = Math.min(1, maxW / img.naturalWidth);
-      const w = Math.max(1, Math.round(img.naturalWidth * scale));
-      const h = Math.max(1, Math.round(img.naturalHeight * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      return canvas.toDataURL("image/jpeg", HISTORY_THUMB_JPEG_QUALITY);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
-
-  /** 容量超過時は古い履歴の画像を削除してから再試行 */
-  function saveHistoryWithEviction(list) {
-    const work = list.slice(0, MAX_HISTORY);
-    if (saveHistory(work)) return true;
-    for (let i = work.length - 1; i >= 0; i--) {
-      if (!work[i].dataUrl) continue;
-      work[i] = { ...work[i], dataUrl: null };
-      if (saveHistory(work)) return true;
-    }
-    return false;
-  }
-
-  function setPlaceholder(el, key) {
-    const label = (typeof CONFIG !== "undefined" && CONFIG["label" + key]) || key;
-    if (el) el.placeholder = label;
-  }
-
-  function initEntrance() {
-    const versionEl = $("app-version");
-    if (versionEl && typeof CONFIG !== "undefined") {
-      if (CONFIG.appVersion) versionEl.textContent = CONFIG.appVersion;
-      if (CONFIG.entranceFontSizeVersion != null) {
-        versionEl.style.fontSize = CONFIG.entranceFontSizeVersion + "px";
-      }
-    }
-
-    const releaseNotesEl = $("app-release-notes");
-    if (releaseNotesEl && typeof CONFIG !== "undefined") {
-      const notes = typeof CONFIG.appReleaseNotes === "string" ? CONFIG.appReleaseNotes : "";
-      if (notes.trim() === "") {
-        releaseNotesEl.setAttribute("hidden", "");
-        releaseNotesEl.textContent = "";
-      } else {
-        releaseNotesEl.removeAttribute("hidden");
-        releaseNotesEl.textContent = notes;
-      }
-      if (CONFIG.entranceFontSizeReleaseNotes != null) {
-        releaseNotesEl.style.fontSize = CONFIG.entranceFontSizeReleaseNotes + "px";
-      }
-    }
-
-    const mainCommentEl = $("entrance-main-comment");
-    if (mainCommentEl && typeof CONFIG !== "undefined") {
-      const mainComment = typeof CONFIG.entranceMainComment === "string" ? CONFIG.entranceMainComment : "";
-      if (mainComment.trim() === "") {
-        mainCommentEl.setAttribute("hidden", "");
-        mainCommentEl.textContent = "";
-      } else {
-        mainCommentEl.removeAttribute("hidden");
-        mainCommentEl.textContent = mainComment;
-      }
-      if (CONFIG.entranceFontSizeMainComment != null) {
-        mainCommentEl.style.fontSize = CONFIG.entranceFontSizeMainComment + "px";
-      }
-    }
-
-    const explanation = $("entrance-explanation");
-    if (explanation && typeof CONFIG !== "undefined" && CONFIG.imageLoadExplanation) {
-      explanation.textContent = CONFIG.imageLoadExplanation;
-    }
-
-    $("btn-load-image").addEventListener("click", () => $("input-image").click());
-    $("btn-start-without").addEventListener("click", () => openSheetWithRecognitionResult(null));
-    const btnStartNoMoves = $("btn-start-no-moves");
-    if (btnStartNoMoves) {
-      if (typeof CONFIG !== "undefined" && CONFIG.labelStartNoMoves) {
-        btnStartNoMoves.textContent = CONFIG.labelStartNoMoves;
-      }
-      btnStartNoMoves.addEventListener("click", () => openSheetWithRecognitionResult(null, { noMovesMode: true }));
-    }
-    $("btn-past").addEventListener("click", () => {
-      renderHistory();
-      showScreen("history");
-    });
-
-    const btnLoadJson = $("btn-load-json");
-    if (btnLoadJson) {
-      btnLoadJson.addEventListener("click", async () => {
-        try {
-          const json = await readJsonFromClipboard();
-          openSheetWithJson(json);
-        } catch (err) {
-          let msg = "クリップボードに有効なパーティjsonが見つかりません。";
-          if (err && err.message === "clipboard_unavailable") {
-            msg = "このブラウザではクリップボードを読み取れません。https環境でお試しください。";
-          } else if (err && err.message === "invalid_json") {
-            msg = "クリップボードのデータがjson形式ではありません。";
-          } else if (err && err.message === "invalid_format") {
-            msg = "パーティjsonの形式が正しくありません。";
-          } else if (err && err.message === "empty") {
-            msg = "クリップボードが空です。";
-          }
-          showJsonErrorOverlay(msg);
-        }
-      });
-    }
-
-    const btnJsonErrorOk = $("btn-json-error-ok");
-    if (btnJsonErrorOk) btnJsonErrorOk.addEventListener("click", hideJsonErrorOverlay);
-    const overlayJsonError = $("overlay-json-error");
-    if (overlayJsonError) {
-      overlayJsonError.addEventListener("click", (e) => {
-        if (e.target.classList.contains("json-error-backdrop")) hideJsonErrorOverlay();
-      });
-    }
-
-    $("input-image").addEventListener("change", async (e) => {
-      const file = e.target && e.target.files[0];
-      e.target.value = "";
-      if (!file || !file.type.startsWith("image/")) return;
-      const img = new Image();
-      img.onload = async () => {
-        showProgress();
-        const hint = document.getElementById("progress-overlay-hint");
-        if (hint) {
-          hint.textContent = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionHint) ? CONFIG.labelRecognitionHint : "※初回時のみ少し時間かかります";
-          hint.setAttribute("aria-hidden", "false");
-        }
-        const hint2 = document.getElementById("progress-overlay-hint2");
-        if (hint2) {
-          const t2 = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionHint2) ? CONFIG.labelRecognitionHint2 : "";
-          hint2.textContent = t2;
-          hint2.setAttribute("aria-hidden", t2 ? "false" : "true");
-        }
-        try {
-          const result = await Recognition.recognize(img, { onProgress: setProgress });
-          openSheetWithRecognitionResult(result);
-        } catch (err) {
-          var failed = Array(6).fill(null).map(function () {
-            return { dexNo: null, name: null, cp: null, isShadow: false, isLight: false };
-          });
-          openSheetWithRecognitionResult(failed);
-        } finally {
-          if (hint) { hint.setAttribute("aria-hidden", "true"); }
-          if (hint2) { hint2.setAttribute("aria-hidden", "true"); }
-          hideProgress();
-        }
-      };
-      img.onerror = () => openSheetWithRecognitionResult(null);
-      img.src = URL.createObjectURL(file);
-    });
-  }
-
-  function openSheetWithRecognitionResult(result, options) {
-    historyReplaceSlotIndex = null;
-    state.noMovesMode = !!(options && options.noMovesMode);
-    loadSavedInputs();
-    state.handleName = state.handleName || "";
-    state.trainerName = state.trainerName || "";
-    state.friendCode = state.friendCode || "";
-
-    state.recognitionAttempted = result !== null && Array.isArray(result) && result.length >= 6;
-
-    if (result && Array.isArray(result) && result.length >= 6) {
-      result.forEach((r, i) => {
-        const slot = state.pokemons[i];
-        slot.dexNo = r.dexNo;
-        slot.name = r.name || null;
-        slot.cp = r.cp != null ? String(r.cp) : "";
-        slot.isShadow = !!r.isShadow;
-        slot.isLight = !!r.isLight;
-        if (r.dexNo && DataService && !state.noMovesMode) {
-          const p = DataService.getPokemonByDexNo(r.dexNo);
-          if (p) {
-            const def = DataService.getDefaultMoves(p);
-            slot.fast = def.fast || "";
-            slot.charge1 = def.charge1 || "";
-            slot.charge2 = def.charge2 || "";
-            slot.third = def.third || "";
-          }
-        } else if (state.noMovesMode) {
-          slot.fast = "";
-          slot.charge1 = "";
-          slot.charge2 = "";
-          slot.third = "";
-        }
-      });
-    } else {
-      state.pokemons = state.pokemons.map(() => ({
-        dexNo: null,
-        name: null,
-        cp: "",
-        isShadow: false,
-        isLight: false,
-        fast: "",
-        charge1: "",
-        charge2: "",
-        third: "",
-      }));
-    }
-
-    bindSheetForm();
-    updateSheetModeUI();
-    renderPokemonSlots();
-    showScreen("sheet");
-  }
-
-  function updateSheetModeUI() {
-    const sheet = $("screen-sheet");
-    if (sheet) sheet.classList.toggle("sheet-no-moves", !!state.noMovesMode);
-
-    const opt = (typeof CONFIG !== "undefined" && CONFIG.labelOptionalSuffix) || "(任意)";
-    const suffix = state.noMovesMode ? opt : "";
-    const labelHandle = $("label-handle");
-    const labelTrainer = $("label-trainer");
-    const labelFriend = $("label-friendcode");
-    const baseHandle = (typeof CONFIG !== "undefined" && CONFIG.labelHandleName) || "ハンドルネーム";
-    const baseTrainer = (typeof CONFIG !== "undefined" && CONFIG.labelTrainerName) || "トレーナーネーム";
-    const baseFriend = (typeof CONFIG !== "undefined" && CONFIG.labelFriendCode) || "フレンドコード";
-    if (labelHandle) labelHandle.textContent = baseHandle + suffix;
-    if (labelTrainer) labelTrainer.textContent = baseTrainer + suffix;
-    if (labelFriend) labelFriend.textContent = baseFriend + suffix;
-
-    const btnClearMoves = $("btn-clear-moves");
-    if (btnClearMoves) btnClearMoves.hidden = !!state.noMovesMode;
-
-    const moveBugRow = $("move-bug-row");
-    if (moveBugRow) moveBugRow.hidden = !!state.noMovesMode;
-    if (state.noMovesMode && state.moveBugMode) {
-      state.moveBugMode = false;
-      updateMoveBugToggleUI();
-    }
-  }
-
-  function clearAllMoves() {
-    state.pokemons.forEach((p) => {
-      p.fast = "";
-      p.charge1 = "";
-      p.charge2 = "";
-    });
-    renderPokemonSlots();
-  }
-
-  function bindSheetForm() {
-    const handle = $("input-handle");
-    const trainer = $("input-trainer");
-    const friend = $("input-friendcode");
-    if (handle) {
-      handle.value = state.handleName;
-      handle.placeholder = (typeof CONFIG !== "undefined" && CONFIG.labelHandleName) || "ハンドルネーム";
-      handle.oninput = () => { state.handleName = handle.value; };
-    }
-    if (trainer) {
-      trainer.value = state.trainerName;
-      trainer.placeholder = (typeof CONFIG !== "undefined" && CONFIG.labelTrainerName) || "トレーナーネーム";
-      trainer.oninput = () => { state.trainerName = trainer.value; };
-    }
-    if (friend) {
-      friend.value = state.friendCode;
-      friend.placeholder = (typeof CONFIG !== "undefined" && CONFIG.labelFriendCode) || "フレンドコード";
-      friend.oninput = () => {
-        friend.value = friend.value.replace(/\D/g, "");
-        state.friendCode = friend.value;
-      };
-    }
-
-    $("btn-back-sheet").onclick = () => {
-      historyReplaceSlotIndex = null;
-      showScreen("entrance");
-    };
-    $("btn-output").onclick = outputImage;
-    $("btn-preview").onclick = openPreviewOverlay;
-
-    // 保存オーバーレイの閉じるボタン
-    const btnCloseSave = $("btn-close-save-image");
-    if (btnCloseSave) btnCloseSave.onclick = closeSaveImageOverlay;
-    const saveBackdrop = $("save-image-backdrop");
-    if (saveBackdrop) saveBackdrop.onclick = closeSaveImageOverlay;
-
-    // jsonコピーボタン
-    const btnCopyJson = $("btn-copy-json");
-    if (btnCopyJson) {
-      btnCopyJson.onclick = async () => {
-        const ok = await copyJsonToClipboard();
-        const orig = btnCopyJson.textContent;
-        btnCopyJson.textContent = ok ? "コピーしました" : "コピー失敗";
-        btnCopyJson.classList.add(ok ? "copied" : "copy-failed");
-        setTimeout(() => {
-          btnCopyJson.textContent = orig;
-          btnCopyJson.classList.remove("copied", "copy-failed");
-        }, 2000);
-      };
-    }
-
-    const btnClearMoves = $("btn-clear-moves");
-    if (btnClearMoves) {
-      if (typeof CONFIG !== "undefined" && CONFIG.labelClearAllMoves) {
-        btnClearMoves.textContent = CONFIG.labelClearAllMoves;
-      }
-      btnClearMoves.onclick = () => clearAllMoves();
-    }
-
-    initMoveBugToggle();
+    }, { passive: false });
   }
 
   function buildMoveSelectOptions(learnList, selected, includeAllMovesOption) {
     const list = learnList || [];
     const seen = {};
     const parts = [];
-    // 習得リスト外の現在値（緊急登録技）を先頭に残す
     if (selected && list.indexOf(selected) < 0) {
       parts.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
       seen[selected] = true;
@@ -489,42 +201,43 @@
     return parts.join("");
   }
 
-  function renderPokemonSlots() {
-    const container = $("pokemon-slots");
+  function getSlotState(containerId) {
+    return containerId === "log-pokemon-slots" ? logState : state;
+  }
+
+  function renderPokemonSlots(containerId) {
+    const container = $(containerId || "pokemon-slots");
     if (!container) return;
-    const labelSelect = (typeof CONFIG !== "undefined" && CONFIG.labelSelectPokemon) || "ポケモン選択";
-    const labelFailed = (typeof CONFIG !== "undefined" && CONFIG.labelRecognitionFailed) || "画像認識失敗";
-    const labelCp = (typeof CONFIG !== "undefined" && CONFIG.labelCp) || "CP";
-    const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
+    const slotState = getSlotState(containerId);
+    const pokemons = slotState.pokemons;
+    const moveBug = slotState.moveBugMode;
+    const recAttempted = containerId === "pokemon-slots" ? state.recognitionAttempted : false;
+
+    const labelSelect = (CONFIG && CONFIG.labelSelectPokemon) || "ポケモン選択";
+    const labelFailed = (CONFIG && CONFIG.labelRecognitionFailed) || "画像認識失敗";
+    const labelCp = (CONFIG && CONFIG.labelCp) || "CP";
+    const basePath = getBasePath();
     const shadowLightPath = basePath.replace(/\/?$/, "/") + "Image/Type&shadow/";
 
-    container.innerHTML = state.pokemons.map((p, i) => {
-      const nameLabel = p.name || (p.dexNo === null ? (state.recognitionAttempted ? labelFailed : labelSelect) : labelFailed);
-      var showQuestionMark = state.recognitionAttempted && !p.dexNo;
+    container.innerHTML = pokemons.map((p, i) => {
+      const nameLabel = p.name || (p.dexNo === null ? (recAttempted ? labelFailed : labelSelect) : labelFailed);
       const pm = p.dexNo && DataService ? DataService.getPokemonByDexNo(p.dexNo) : null;
       const isMega = !!(pm && DataService.isMegaPokemon(pm));
       const picSrc = pm && pm.picPath ? basePath.replace(/\/?$/, "/") + pm.picPath : "";
       const picOrPlaceholder = p.dexNo
         ? (picSrc ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${picSrc}" alt="" data-slot="${i}" data-field="img" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`)
-        : (showQuestionMark ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">` : "");
+        : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`;
       const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [], third: [] };
-      const showAllMovesOpt = !!(state.moveBugMode && p.dexNo);
+      const showAllMovesOpt = !!(moveBug && p.dexNo);
       const fastOpts = buildMoveSelectOptions(moves.fast, p.fast, showAllMovesOpt);
       const charge1Opts = buildMoveSelectOptions(moves.charge, p.charge1, showAllMovesOpt);
       const charge2Opts = buildMoveSelectOptions(moves.charge, p.charge2, showAllMovesOpt);
-      const megaBg = isMega
-        ? `<img class="slot-mega-bg" src="${shadowLightPath}mega_trans.png" alt="" aria-hidden="true">`
-        : "";
-      if (isMega) {
-        p.third = (moves.third && moves.third[0]) || "";
-      } else {
-        p.third = "";
-      }
+      const megaBg = isMega ? `<img class="slot-mega-bg" src="${shadowLightPath}mega_trans.png" alt="" aria-hidden="true">` : "";
+      if (isMega) p.third = (moves.third && moves.third[0]) || "";
+      else p.third = "";
       const thirdLabel = p.third && DataService ? DataService.getDisplayMoveName(p.third) : "-";
-      const thirdRow = isMega ? `
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="third"></span><div class="move-select-wrap"><span class="move-fixed-display">${escapeHtml(thirdLabel)}</span></div></div>` : "";
-
-      const movesBlock = state.noMovesMode ? "" : `
+      const thirdRow = isMega ? `<div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="third"></span><div class="move-select-wrap"><span class="move-fixed-display">${escapeHtml(thirdLabel)}</span></div></div>` : "";
+      const movesBlock = `
           <div class="slot-moves">
             <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
             <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
@@ -550,44 +263,35 @@
       const slotIndex = parseInt(el.getAttribute("data-slot"), 10);
       const field = el.getAttribute("data-field");
       const btn = el.getAttribute("data-btn");
-      const move = el.getAttribute("data-move");
-
       if (field === "name" || field === "img") {
-        el.addEventListener("click", () => openSearchOverlay(slotIndex));
-        el.addEventListener("touchstart", (e) => { searchTouchStartY = e.touches[0].clientY; }, { passive: true });
-        el.addEventListener("touchend", (e) => {
-          const dy = Math.abs(e.changedTouches[0].clientY - searchTouchStartY);
-          if (dy < 10) {
-            e.preventDefault(); // Androidのゴーストクリック防止
-            openSearchOverlay(slotIndex);
-          }
-        }, { passive: false });
+        bindTouchSelect(el, () => openSearchOverlay(slotIndex, containerId));
       } else if (field === "cp") {
         el.addEventListener("input", () => {
           el.value = el.value.replace(/\D/g, "");
-          state.pokemons[slotIndex].cp = el.value;
+          pokemons[slotIndex].cp = el.value;
+          if (containerId === "log-pokemon-slots") logState.dirty = true;
+          else sheetDirty = true;
         });
       } else if (field === "fast" || field === "charge1" || field === "charge2") {
         el.addEventListener("change", () => {
           const key = field;
           if (el.value === ALL_MOVES_SENTINEL) {
-            // センチネルは状態に入れず、直前の技に戻して全わざ検索を開く
-            el.value = state.pokemons[slotIndex][key] || "";
-            openMoveSearchOverlay(slotIndex, key);
+            el.value = pokemons[slotIndex][key] || "";
+            openMoveSearchOverlay(slotIndex, key, containerId);
             return;
           }
-          state.pokemons[slotIndex][key] = el.value;
-          updateTypeIcon(slotIndex, key, el.value);
-          // 折り畳み表示スパンを短縮名で更新
+          pokemons[slotIndex][key] = el.value;
+          updateTypeIcon(slotIndex, key, el.value, containerId);
           const disp = el.parentElement && el.parentElement.querySelector(".move-display");
           if (disp) disp.textContent = el.value && DataService ? DataService.getDisplayMoveName(el.value) : "";
+          if (containerId === "log-pokemon-slots") logState.dirty = true;
+          else sheetDirty = true;
         });
-        if (el.value) updateTypeIcon(slotIndex, field, el.value);
+        if (el.value) updateTypeIcon(slotIndex, field, el.value, containerId);
       }
-
       if (btn === "shadow" || btn === "light") {
         el.addEventListener("click", () => {
-          const slot = state.pokemons[slotIndex];
+          const slot = pokemons[slotIndex];
           if (btn === "shadow") {
             slot.isShadow = !slot.isShadow;
             if (slot.isShadow) slot.isLight = false;
@@ -595,77 +299,56 @@
             slot.isLight = !slot.isLight;
             if (slot.isLight) slot.isShadow = false;
           }
-          renderPokemonSlots();
+          if (containerId === "log-pokemon-slots") logState.dirty = true;
+          else sheetDirty = true;
+          renderPokemonSlots(containerId);
         });
       }
     });
-
-    state.pokemons.forEach((p, i) => {
-      if (p.third) updateTypeIcon(i, "third", p.third);
+    pokemons.forEach((p, i) => {
+      if (p.third) updateTypeIcon(i, "third", p.third, containerId);
     });
   }
 
-  async function openPreviewOverlay() {
-    const overlay = $("overlay-preview");
-    const container = $("preview-overlay-content");
-    if (!overlay || !container) return;
-    let canvas = container.querySelector("canvas");
-    if (!canvas) {
-      canvas = document.createElement("canvas");
-      container.appendChild(canvas);
-    }
-    const maxW = Math.min(400, window.innerWidth - 32);
-    const w = maxW;
-    const h = Math.floor((w * 2480) / 1748);
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-    await document.fonts.ready;
-    showProgress();
-    try {
-      await SheetRender.drawSheet(state, canvas, true, setProgress);
-    } finally {
-      hideProgress();
-    }
-    overlay.classList.add("active");
-    overlay.setAttribute("aria-hidden", "false");
-  }
-
-  function closePreviewOverlay() {
-    const overlay = $("overlay-preview");
-    if (overlay) {
-      overlay.classList.remove("active");
-      overlay.setAttribute("aria-hidden", "true");
-    }
-  }
-
-  function updateTypeIcon(slotIndex, moveKey, moveName) {
+  function updateTypeIcon(slotIndex, moveKey, moveName, containerId) {
     if (!DataService || !moveName) return;
     const typeName = DataService.getMoveTypeName(moveName);
     const path = typeName && DataService.getTypeIconPath(typeName);
-    const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
-    const icon = document.querySelector(`.slot-moves .move-type-icon[data-slot="${slotIndex}"][data-move="${moveKey}"]`);
+    const basePath = getBasePath();
+    const root = $(containerId || "pokemon-slots");
+    if (!root) return;
+    const icon = root.querySelector(`.slot-moves .move-type-icon[data-slot="${slotIndex}"][data-move="${moveKey}"]`);
     if (icon) {
       icon.innerHTML = path ? `<img src="${basePath.replace(/\/?$/, "/") + path}" alt="" width="18" height="18">` : "";
     }
   }
 
-  function openSearchOverlay(slotIndex) {
+  function collectPriorityDex() {
+    const dexes = [];
+    const pushFrom = (json) => {
+      if (!json || !Array.isArray(json.pokemons)) return;
+      json.pokemons.forEach((p) => {
+        if (p && p.dex != null) dexes.push(p.dex);
+      });
+    };
+    StorageService.getPartySlots().forEach((s) => { if (s) pushFrom(s.json); });
+    StorageService.getBattleLogs().forEach((log) => pushFrom(log.json));
+    if (DataService && DataService.setSearchPriority) DataService.setSearchPriority(dexes);
+  }
+
+  function openSearchOverlay(slotIndex, containerId) {
     currentSearchSlotIndex = slotIndex;
+    currentSearchContainerId = containerId || "pokemon-slots";
+    collectPriorityDex();
     const overlay = $("overlay-search");
     const results = $("search-results");
     const searchInput = $("search-pokemon");
-    if (overlay) overlay.classList.add("active");
-    overlay.setAttribute("aria-hidden", "false");
-    if (searchInput) {
-      searchInput.value = "";
-      searchInput.focus();
-    }
+    if (overlay) { overlay.classList.add("active"); overlay.setAttribute("aria-hidden", "false"); }
+    if (searchInput) { searchInput.value = ""; searchInput.focus(); }
 
     function runSearch(q) {
       const filtered = DataService.searchPokemon(q);
-      const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
+      const basePath = getBasePath();
       results.innerHTML = filtered.map((p) => `
         <div class="search-result-item" data-dex="${escapeHtml(p.dexNo)}" data-name="${escapeHtml(p.name)}">
           <img src="${basePath.replace(/\/?$/, "/") + (p.picPath || "Image/Pic/" + p.dexNo + ".png")}" alt="">
@@ -674,22 +357,7 @@
       results.querySelectorAll(".search-result-item").forEach((item) => {
         const dex = item.getAttribute("data-dex");
         const name = item.getAttribute("data-name");
-        item.addEventListener("click", (e) => {
-          e.preventDefault();
-          selectPokemon(dex, name);
-        });
-        item.addEventListener("touchstart", function (e) {
-          searchTouchStartX = e.touches[0].clientX;
-          searchTouchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        item.addEventListener("touchend", function (e) {
-          var dx = e.changedTouches[0].clientX - searchTouchStartX;
-          var dy = e.changedTouches[0].clientY - searchTouchStartY;
-          if (dx * dx + dy * dy < 225) {
-            e.preventDefault();
-            selectPokemon(dex, name);
-          }
-        }, { passive: false });
+        bindTouchSelect(item, () => selectPokemon(dex, name));
       });
     }
     if (searchInput) searchInput.oninput = () => runSearch(searchInput.value);
@@ -698,342 +366,83 @@
 
   function selectPokemon(dexNo, name) {
     if (currentSearchSlotIndex == null || !DataService) return;
+    const slotState = getSlotState(currentSearchContainerId);
     const p = DataService.getPokemonByDexNo(dexNo);
     const def = p ? DataService.getDefaultMoves(p) : { fast: "", charge1: "", charge2: "" };
-    const slot = state.pokemons[currentSearchSlotIndex];
+    const slot = slotState.pokemons[currentSearchSlotIndex];
     slot.dexNo = dexNo;
     slot.name = name;
-    if (state.noMovesMode) {
-      slot.fast = "";
-      slot.charge1 = "";
-      slot.charge2 = "";
-      slot.third = "";
-    } else {
-      slot.fast = def.fast || "";
-      slot.charge1 = def.charge1 || "";
-      slot.charge2 = def.charge2 || "";
-      slot.third = def.third || "";
-    }
-    if (!slot.cp && slot.cp !== 0) slot.cp = "";
-    renderPokemonSlots();
-    currentSearchSlotIndex = null;
+    slot.fast = def.fast || "";
+    slot.charge1 = def.charge1 || "";
+    slot.charge2 = def.charge2 || "";
+    slot.third = def.third || "";
+    if (!slot.cp) slot.cp = "";
+    if (currentSearchContainerId === "log-pokemon-slots") logState.dirty = true;
+    else sheetDirty = true;
+    renderPokemonSlots(currentSearchContainerId);
     closeSearchOverlay();
   }
 
   function closeSearchOverlay() {
     const overlay = $("overlay-search");
-    if (overlay) overlay.classList.remove("active");
-    overlay.setAttribute("aria-hidden", "true");
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
     currentSearchSlotIndex = null;
   }
 
-  function openMoveSearchOverlay(slotIndex, field) {
+  function openMoveSearchOverlay(slotIndex, field, containerId) {
     currentMoveSearchSlotIndex = slotIndex;
     currentMoveSearchField = field;
+    currentMoveSearchContainerId = containerId || "pokemon-slots";
     const overlay = $("overlay-move-search");
     const results = $("move-search-results");
     const searchInput = $("search-move");
     if (!overlay || !results || !DataService) return;
-
     overlay.classList.add("active");
     overlay.setAttribute("aria-hidden", "false");
-    if (searchInput) {
-      searchInput.value = "";
-      searchInput.focus();
-    }
-
+    if (searchInput) { searchInput.value = ""; searchInput.focus(); }
     const kind = field === "fast" ? 0 : field === "third" ? 2 : 1;
-
     function runMoveSearch(q) {
       const filtered = DataService.searchMoves(q, kind);
-      const basePath = (typeof getBasePath === "function" && getBasePath()) || "./";
+      const basePath = getBasePath();
       results.innerHTML = filtered.map((m) => {
         const typeName = m.type || "";
         const iconPath = typeName ? DataService.getTypeIconPath(typeName) : "";
-        const imgHtml = iconPath
-          ? `<img src="${basePath.replace(/\/?$/, "/") + iconPath}" alt="">`
-          : `<span class="search-result-icon-placeholder"></span>`;
-        return `
-        <div class="search-result-item" data-move="${escapeHtml(m.name)}">
-          ${imgHtml}
-          <span>${escapeHtml(m.name)}</span>
-        </div>`;
+        const imgHtml = iconPath ? `<img src="${basePath.replace(/\/?$/, "/") + iconPath}" alt="">` : `<span class="search-result-icon-placeholder"></span>`;
+        return `<div class="search-result-item" data-move="${escapeHtml(m.name)}">${imgHtml}<span>${escapeHtml(m.name)}</span></div>`;
       }).join("");
       results.querySelectorAll(".search-result-item").forEach((item) => {
         const moveName = item.getAttribute("data-move");
-        item.addEventListener("click", (e) => {
-          e.preventDefault();
-          selectMoveFromAllList(moveName);
-        });
-        item.addEventListener("touchstart", function (e) {
-          searchTouchStartX = e.touches[0].clientX;
-          searchTouchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        item.addEventListener("touchend", function (e) {
-          var dx = e.changedTouches[0].clientX - searchTouchStartX;
-          var dy = e.changedTouches[0].clientY - searchTouchStartY;
-          if (dx * dx + dy * dy < 225) {
-            e.preventDefault();
-            selectMoveFromAllList(moveName);
-          }
-        }, { passive: false });
+        bindTouchSelect(item, () => selectMoveFromAllList(moveName));
       });
     }
-
     if (searchInput) searchInput.oninput = () => runMoveSearch(searchInput.value);
     runMoveSearch("");
   }
 
   function selectMoveFromAllList(moveName) {
     if (currentMoveSearchSlotIndex == null || !currentMoveSearchField) return;
-    const slot = state.pokemons[currentMoveSearchSlotIndex];
+    const slotState = getSlotState(currentMoveSearchContainerId);
+    const slot = slotState.pokemons[currentMoveSearchSlotIndex];
     if (!slot) return;
     slot[currentMoveSearchField] = moveName || "";
-    renderPokemonSlots();
+    if (currentMoveSearchContainerId === "log-pokemon-slots") logState.dirty = true;
+    else sheetDirty = true;
+    renderPokemonSlots(currentMoveSearchContainerId);
     closeMoveSearchOverlay();
   }
 
   function closeMoveSearchOverlay() {
     const overlay = $("overlay-move-search");
-    if (overlay) {
-      overlay.classList.remove("active");
-      overlay.setAttribute("aria-hidden", "true");
-    }
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
     currentMoveSearchSlotIndex = null;
     currentMoveSearchField = null;
   }
 
-  $("btn-close-search").addEventListener("click", closeSearchOverlay);
-  $("search-pokemon").addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeSearchOverlay();
-  });
-
-  const btnCloseMoveSearch = $("btn-close-move-search");
-  if (btnCloseMoveSearch) btnCloseMoveSearch.addEventListener("click", closeMoveSearchOverlay);
-  const searchMoveInput = $("search-move");
-  if (searchMoveInput) {
-    searchMoveInput.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeMoveSearchOverlay();
-    });
-  }
-
-  var btnClosePreview = document.getElementById("btn-close-preview");
-  var overlayPreview = document.getElementById("overlay-preview");
-  if (btnClosePreview) btnClosePreview.addEventListener("click", closePreviewOverlay);
-  if (overlayPreview) overlayPreview.addEventListener("click", function (e) {
-    if (e.target.classList.contains("preview-overlay-backdrop") || e.target.id === "overlay-preview") closePreviewOverlay();
-  });
-
-  window.showRecognitionDebug = function (image, results, debugData, layout) {
-    var overlay = document.getElementById("overlay-debug-recognition");
-    var canvasFull = document.getElementById("debug-canvas-full");
-    var cellsContainer = document.getElementById("debug-cells");
-    if (!overlay || !canvasFull || !cellsContainer) return;
-    var w = layout.w;
-    var h = layout.h;
-    var maxW = 380;
-    var maxH = 520;
-    var scale = Math.min(maxW / w, maxH / h, 1);
-    var cw = Math.round(w * scale);
-    var ch = Math.round(h * scale);
-    canvasFull.width = cw;
-    canvasFull.height = ch;
-    canvasFull.style.width = cw + "px";
-    canvasFull.style.height = ch + "px";
-    var ctx = canvasFull.getContext("2d");
-    ctx.drawImage(image, 0, 0, w, h, 0, 0, cw, ch);
-    var zones = layout.zones;
-    if (zones) {
-      [zones.cp1, zones.cp2].forEach(function (arr) { if (arr) arr.forEach(function (r) { ctx.strokeStyle = "rgba(0,100,255,0.9)"; ctx.lineWidth = 1.5; ctx.strokeRect(r.x * scale, r.y * scale, r.w * scale, r.h * scale); }); });
-      [zones.pokemon1, zones.pokemon2].forEach(function (arr) { if (arr) arr.forEach(function (r) { ctx.strokeStyle = "rgba(255,0,0,0.9)"; ctx.lineWidth = 2; ctx.strokeRect(r.x * scale, r.y * scale, r.w * scale, r.h * scale); }); });
-    }
-    debugData.forEach(function (d) {
-      if (d.pokemonRect) {
-        ctx.strokeStyle = "rgba(255,200,0,0.95)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(d.pokemonRect.x * scale, d.pokemonRect.y * scale, d.pokemonRect.w * scale, d.pokemonRect.h * scale);
-      }
-      if (d.cpRect) {
-        ctx.strokeStyle = "rgba(0,255,200,0.9)";
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(d.cpRect.x * scale, d.cpRect.y * scale, d.cpRect.w * scale, d.cpRect.h * scale);
-      }
-    });
-
-    // === 検索テンプレート検出矩形（シアン点線）と SB オフセット線（黄緑） ===
-    var searchPos = layout.searchPos;
-    if (searchPos) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(0,220,220,0.9)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 2]);
-      ctx.strokeRect(searchPos.x * scale, searchPos.y * scale, searchPos.w * scale, searchPos.h * scale);
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(0,220,220,0.95)";
-      ctx.font = "bold 8px sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("検索", searchPos.x * scale + 2, searchPos.y * scale - 1);
-      ctx.restore();
-    }
-
-    // === refY 基準ライン（マゼンタ点線） ===
-    if (zones && zones.refY != null) {
-      var refYc = zones.refY * scale;
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,0,255,0.95)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath(); ctx.moveTo(0, refYc); ctx.lineTo(cw, refYc); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(255,0,255,0.95)";
-      ctx.font = "bold 8px sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("refY", 2, refYc - 1);
-      ctx.restore();
-    }
-
-    // === Android 黒帯ライン（オレンジ点線） ===
-    if (layout.androidBarH > 0) {
-      var barY = (layout.h - layout.androidBarH) * scale;
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,140,0,0.95)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(cw, barY); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(255,140,0,0.95)";
-      ctx.font = "bold 8px sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("Android bar (" + layout.androidBarH + "px)", 2, barY - 1);
-      ctx.restore();
-    }
-
-    // === N/M/L/K 計測矢印（右端に色分けで表示） ===
-    if (zones && zones.refY != null && zones.cp1 && zones.pokemon1 && zones.cp2) {
-      var cp1r = zones.cp1[0];
-      var pk1r = zones.pokemon1[0];
-      var cp2r = zones.cp2[0];
-      var zN = cp1r.y - zones.refY;
-      var zM = cp1r.h;
-      var zL = pk1r.h;
-      var zK = cp2r.y - (pk1r.y + pk1r.h);
-
-      var drawMeasureArrow = function (y1px, y2px, label, color) {
-        var y1c = y1px * scale;
-        var y2c = y2px * scale;
-        if (Math.abs(y2c - y1c) < 2) return;
-        var mid = (y1c + y2c) / 2;
-        var ax = cw - 10;
-        var capW = 5;
-        ctx.save();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = color;
-        // 縦線
-        ctx.beginPath(); ctx.moveTo(ax, y1c); ctx.lineTo(ax, y2c); ctx.stroke();
-        // 上下キャップ
-        ctx.beginPath();
-        ctx.moveTo(ax - capW, y1c); ctx.lineTo(ax + capW, y1c);
-        ctx.moveTo(ax - capW, y2c); ctx.lineTo(ax + capW, y2c);
-        ctx.stroke();
-        // ラベル（背景付き）
-        ctx.font = "bold 7px sans-serif";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        var tw = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(ax - capW - 3 - tw - 1, mid - 4.5, tw + 3, 9);
-        ctx.fillStyle = color;
-        ctx.fillText(label, ax - capW - 3, mid);
-        ctx.restore();
-      };
-
-      var ry = zones.refY;
-      if (zN > 0) drawMeasureArrow(ry,              ry + zN,       "N=" + zN + "px", "#ffa500");
-                  drawMeasureArrow(cp1r.y,           cp1r.y + zM,   "M=" + zM + "px", "#44aaff");
-                  drawMeasureArrow(pk1r.y,            pk1r.y + zL,   "L=" + zL + "px", "#ff4444");
-      if (zK > 0) drawMeasureArrow(pk1r.y + zL,     pk1r.y + zL + zK, "K=" + zK + "px", "#44dd88");
-    }
-    cellsContainer.innerHTML = "";
-    var threshold = (typeof CONFIG !== "undefined" && CONFIG.imageMatchThreshold) ? CONFIG.imageMatchThreshold : 0.65;
-    debugData.forEach(function (d) {
-      var pr = d.pokemonRect || {};
-      var div = document.createElement("div");
-      div.className = "debug-cell-item";
-      var row = document.createElement("div");
-      row.className = "debug-cell-thumbnails";
-      var smallP = document.createElement("canvas");
-      smallP.width = 64;
-      smallP.height = 64;
-      smallP.className = "debug-cell-canvas";
-      smallP.title = "ポケモン切り取り";
-      var sctx = smallP.getContext("2d");
-      if (pr.w && pr.h) sctx.drawImage(image, pr.x, pr.y, pr.w, pr.h, 0, 0, 64, 64);
-      sctx.strokeStyle = "red";
-      sctx.strokeRect(0, 0, 64, 64);
-      row.appendChild(smallP);
-      var cr = d.cpRect || {};
-      var smallC = document.createElement("canvas");
-      smallC.width = 48;
-      smallC.height = 32;
-      smallC.className = "debug-cell-canvas debug-cell-cp";
-      smallC.title = "CP切り取り";
-      var cctx = smallC.getContext("2d");
-      if (cr.w && cr.h) cctx.drawImage(image, cr.x, cr.y, cr.w, cr.h, 0, 0, 48, 32);
-      cctx.strokeStyle = "blue";
-      cctx.strokeRect(0, 0, 48, 32);
-      row.appendChild(smallC);
-      div.appendChild(row);
-      var name = (d.match && d.match.name) ? d.match.name : "未認識";
-      var scoreText = "ポケモン " + (d.bestScore != null ? d.bestScore.toFixed(3) : "-");
-      var belowThreshold = (d.bestScore != null && d.bestScore < threshold) ? " (閾値" + threshold + "未満)" : "";
-      var cpText = d.cp != null ? "CP " + d.cp : "CP ---";
-      var cpScoreText = (d.cpScore != null) ? " 一致度 " + d.cpScore.toFixed(3) : "";
-      var slText = (d.isShadow ? " [シャドウ]" : "") + (d.isLight ? " [ライト]" : "");
-      var p = document.createElement("p");
-      p.className = "debug-cell-info";
-      p.textContent = "スロット" + (d.index + 1) + ": " + name + slText + " " + scoreText + belowThreshold;
-      div.appendChild(p);
-      var p2 = document.createElement("p");
-      p2.className = "debug-cell-info debug-cell-cp-sl";
-      p2.textContent = cpText + cpScoreText;
-      div.appendChild(p2);
-      cellsContainer.appendChild(div);
-    });
-    overlay.classList.add("active");
-    overlay.setAttribute("aria-hidden", "false");
-  };
-
-  document.getElementById("btn-close-debug").addEventListener("click", function () {
-    var overlay = document.getElementById("overlay-debug-recognition");
-    if (overlay) {
-      overlay.classList.remove("active");
-      overlay.setAttribute("aria-hidden", "true");
-    }
-  });
-  document.getElementById("overlay-debug-recognition").addEventListener("click", function (e) {
-    if (e.target.classList.contains("debug-overlay-backdrop")) {
-      document.getElementById("overlay-debug-recognition").classList.remove("active");
-      document.getElementById("overlay-debug-recognition").setAttribute("aria-hidden", "true");
-    }
-  });
-
-  function escapeHtml(s) {
-    if (s == null) return "";
-    const div = document.createElement("div");
-    div.textContent = s;
-    return div.innerHTML;
-  }
-
-  // ─── JSON 入出力 ────────────────────────────────────────────────
   function buildPartyJson(curState) {
     const pokemons = curState.pokemons.map((p) => {
       if (!p || !p.dexNo) return null;
       const pm = DataService ? DataService.getPokemonByDexNo(p.dexNo) : null;
       const speciesName = pm ? DataService.getPokemonEngName(pm.name) : "";
-      // dex は数値のみなら Number、フォーム違いの "38-1" 等は文字列のまま
       const dexRaw = String(p.dexNo);
       const dex = /^\d+$/.test(dexRaw) ? Number(dexRaw) : dexRaw;
       const cpNum = parseInt(p.cp, 10);
@@ -1057,44 +466,29 @@
     };
   }
 
+  function buildLogJson() {
+    const party = buildPartyJson({ handleName: "", trainerName: "", friendCode: "", pokemons: logState.pokemons });
+    return { opponent: logState.opponent || "", pokemons: party.pokemons };
+  }
+
   function isValidPartyJson(json) {
-    if (!json || typeof json !== "object") return false;
-    if (!Array.isArray(json.pokemons)) return false;
-    return true;
+    return json && typeof json === "object" && Array.isArray(json.pokemons);
   }
 
   function applyPartyJson(json) {
     if (!isValidPartyJson(json)) return false;
     state.handleName = typeof json.trainerName === "string" ? json.trainerName : "";
     state.trainerName = typeof json.trainerId === "string" ? json.trainerId : "";
-    state.friendCode = typeof json.friendCode === "string"
-      ? String(json.friendCode).replace(/\D/g, "")
-      : "";
-
+    state.friendCode = typeof json.friendCode === "string" ? String(json.friendCode).replace(/\D/g, "") : "";
     state.recognitionAttempted = false;
-
     const slots = [];
     for (let i = 0; i < 6; i++) {
       const src = json.pokemons[i];
-      const slot = {
-        dexNo: null,
-        name: null,
-        cp: "",
-        isShadow: false,
-        isLight: false,
-        fast: "",
-        charge1: "",
-        charge2: "",
-        third: "",
-      };
+      const slot = emptyPokemons()[0];
       if (src && typeof src === "object") {
         let pm = null;
-        if (src.dex != null) {
-          pm = DataService ? DataService.getPokemonByDexNo(String(src.dex)) : null;
-        }
-        if (!pm && src.speciesName) {
-          pm = DataService ? DataService.getPokemonByEngName(src.speciesName) : null;
-        }
+        if (src.dex != null) pm = DataService ? DataService.getPokemonByDexNo(String(src.dex)) : null;
+        if (!pm && src.speciesName) pm = DataService ? DataService.getPokemonByEngName(src.speciesName) : null;
         if (pm) {
           slot.dexNo = pm.dexNo;
           slot.name = pm.name;
@@ -1105,17 +499,16 @@
           slot.isShadow = !!src.shadow;
           slot.isLight = !!src.light;
           if (slot.isShadow && slot.isLight) slot.isLight = false;
-
-          const pickToken = (v) => {
-            if (Array.isArray(v)) return v[0] || "";
-            if (typeof v === "string") return v;
-            return "";
-          };
-          const def = DataService ? DataService.getDefaultMoves(pm) : { fast: "", charge1: "", charge2: "" };
+          const pickToken = (v) => (Array.isArray(v) ? v[0] || "" : typeof v === "string" ? v : "");
+          const def = DataService ? DataService.getDefaultMoves(pm) : { fast: "", charge1: "", charge2: "", third: "" };
+          const fastJp = DataService ? DataService.parseJsonMoveName(pickToken(src.fastMoves), pm.dexNo) : "";
+          const c1Jp = DataService ? DataService.parseJsonMoveName(pickToken(src.chargedMoves1), pm.dexNo) : "";
+          const c2Jp = DataService ? DataService.parseJsonMoveName(pickToken(src.chargedMoves2), pm.dexNo) : "";
+          const t3Jp = DataService ? DataService.parseJsonMoveName(pickToken(src.thirdMoves), pm.dexNo) : "";
           slot.fast = fastJp || def.fast || "";
           slot.charge1 = c1Jp || def.charge1 || "";
           slot.charge2 = c2Jp || def.charge2 || "";
-          slot.third = def.third || "";
+          slot.third = t3Jp || def.third || "";
         }
       }
       slots.push(slot);
@@ -1124,43 +517,67 @@
     return true;
   }
 
+  function applyLogJson(json) {
+    logState.opponent = typeof json.opponent === "string" ? json.opponent : "";
+    const fake = { trainerName: "", trainerId: "", friendCode: "", pokemons: json.pokemons || [] };
+    const slots = [];
+    for (let i = 0; i < 6; i++) {
+      const src = fake.pokemons[i];
+      const slot = emptyPokemons()[0];
+      if (src && typeof src === "object") {
+        let pm = null;
+        if (src.dex != null) pm = DataService ? DataService.getPokemonByDexNo(String(src.dex)) : null;
+        if (!pm && src.speciesName) pm = DataService ? DataService.getPokemonByEngName(src.speciesName) : null;
+        if (pm) {
+          slot.dexNo = pm.dexNo;
+          slot.name = pm.name;
+          if (src.CP != null) {
+            const n = parseInt(src.CP, 10);
+            if (Number.isFinite(n)) slot.cp = String(n);
+          }
+          slot.isShadow = !!src.shadow;
+          slot.isLight = !!src.light;
+          const pickToken = (v) => (Array.isArray(v) ? v[0] || "" : typeof v === "string" ? v : "");
+          const def = DataService.getDefaultMoves(pm);
+          slot.fast = DataService.parseJsonMoveName(pickToken(src.fastMoves), pm.dexNo) || def.fast || "";
+          slot.charge1 = DataService.parseJsonMoveName(pickToken(src.chargedMoves1), pm.dexNo) || def.charge1 || "";
+          slot.charge2 = DataService.parseJsonMoveName(pickToken(src.chargedMoves2), pm.dexNo) || def.charge2 || "";
+          slot.third = DataService.parseJsonMoveName(pickToken(src.thirdMoves), pm.dexNo) || def.third || "";
+        }
+      }
+      slots.push(slot);
+    }
+    logState.pokemons = slots;
+    logState.dirty = false;
+  }
+
   async function copyJsonToClipboard() {
-    const obj = buildPartyJson(state);
-    const text = JSON.stringify(obj, null, 2);
-    let ok = false;
+    const text = JSON.stringify(buildPartyJson(state), null, 2);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
-        ok = true;
+        return true;
       }
-    } catch (_) { ok = false; }
-    if (!ok) {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        ok = document.execCommand("copy");
-        document.body.removeChild(ta);
-      } catch (_) { ok = false; }
-    }
-    return ok;
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (_) { return false; }
   }
 
   async function readJsonFromClipboard() {
-    if (!navigator.clipboard || !navigator.clipboard.readText) {
-      throw new Error("clipboard_unavailable");
-    }
+    if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error("clipboard_unavailable");
     const text = await navigator.clipboard.readText();
     if (!text || !text.trim()) throw new Error("empty");
     let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch (_) {
-      throw new Error("invalid_json");
-    }
+    try { parsed = JSON.parse(text); } catch (_) { throw new Error("invalid_json"); }
     if (!isValidPartyJson(parsed)) throw new Error("invalid_format");
     return parsed;
   }
@@ -1173,192 +590,105 @@
     overlay.classList.add("active");
     overlay.setAttribute("aria-hidden", "false");
   }
-
   function hideJsonErrorOverlay() {
     const overlay = $("overlay-json-error");
-    if (overlay) {
-      overlay.classList.remove("active");
-      overlay.setAttribute("aria-hidden", "true");
-    }
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
   }
 
-  function openSheetWithJson(json, replaceHistoryIndex) {
-    if (typeof replaceHistoryIndex === "number" && replaceHistoryIndex >= 0) {
-      historyReplaceSlotIndex = replaceHistoryIndex;
-    } else {
-      historyReplaceSlotIndex = null;
-    }
-    state.noMovesMode = false;
+  function openSheetWithJson(json, slotIndex) {
+    activeSlotIndex = typeof slotIndex === "number" ? slotIndex : null;
+    sheetOrigin = "slots";
+    sheetDirty = false;
     loadSavedInputs();
     applyPartyJson(json);
     bindSheetForm();
-    updateSheetModeUI();
-    renderPokemonSlots();
+    renderPokemonSlots("pokemon-slots");
     showScreen("sheet");
   }
-  // ───────────────────────────────────────────────────────────────
 
-  // iframe内モバイルかどうかを判定
-  function isIframeMobile() {
-    const inIframe = (function () { try { return window.self !== window.top; } catch (_) { return true; } })();
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    return inIframe && isMobile;
+  function openSheetFresh() {
+    activeSlotIndex = null;
+    sheetOrigin = "menu";
+    sheetDirty = false;
+    state.recognitionAttempted = false;
+    state.moveBugMode = false;
+    state.handleName = "";
+    state.trainerName = "";
+    state.friendCode = "";
+    state.pokemons = emptyPokemons();
+    loadSavedInputs();
+    bindSheetForm();
+    updateEngToggleUI();
+    updateMoveBugToggleUI();
+    renderPokemonSlots("pokemon-slots");
+    showScreen("sheet");
   }
 
-  // 保存オーバーレイを開く（iframe内モバイル用: <img>タグで表示するので長押し保存可能）
-  function showImageFallback(url) {
-    const overlay = $("overlay-save-image");
-    const img = $("save-image-img");
-    if (!overlay || !img) {
-      console.warn("[画像出力] overlay-save-image が見つかりません");
-      return;
-    }
-    // 前回の blob URL があれば解放
-    if (img.dataset.blobUrl && img.dataset.blobUrl !== url) {
-      URL.revokeObjectURL(img.dataset.blobUrl);
-    }
-    img.src = url;
-    img.dataset.blobUrl = url;
-    overlay.classList.add("active");           // .overlay は .active で表示
-    overlay.setAttribute("aria-hidden", "false");
-  }
-
-  function closeSaveImageOverlay() {
-    const overlay = $("overlay-save-image");
-    if (overlay) {
-      overlay.classList.remove("active");
-      overlay.setAttribute("aria-hidden", "true");
-    }
-  }
-
-  async function outputImage() {
-    saveInputs();
-    showProgress();
-
-    // ── レンダリング ──────────────────────────────────────────
-    let blob;
-    try {
-      await document.fonts.ready;
-      blob = await SheetRender.renderToBlob(state, setProgress);
-    } catch (e) {
-      console.error("[画像出力] レンダリングエラー:", e);
-      hideProgress();
-      return;
-    }
-    hideProgress();
-
-    // ── 履歴保存（画像出力より先。スマホでは出力後にページ遷移・中断されうる）──
-    {
-      try {
-        const list = loadHistory();
-        const dataUrl = await createHistoryDataUrl(blob);
-        const entry = { dataUrl, at: Date.now(), json: buildPartyJson(state) };
-        const slot = historyReplaceSlotIndex;
-        if (
-          slot !== null &&
-          typeof slot === "number" &&
-          slot >= 0 &&
-          slot < list.length
-        ) {
-          list[slot] = entry;
-        } else {
-          list.unshift(entry);
-        }
-        let saved = saveHistoryWithEviction(list);
-        if (!saved) {
-          entry.dataUrl = null;
-          saved = saveHistory(list);
-        }
-        if (saved) historyReplaceSlotIndex = null;
-      } catch (e) {
-        console.warn("[画像出力] 履歴保存エラー:", e);
-      }
-    }
-
-    // ── 出力 ─────────────────────────────────────────────────
-    const url = URL.createObjectURL(blob);
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    if (!isMobile) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "teamsheet.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(`<html><head><title>チームシート</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="チームシート" style="max-width:100%;height:auto;"></body></html>`);
-        win.document.close();
-      }
-    } else if (isIframeMobile()) {
-      showImageFallback(url);
-    } else {
-      const file = new File([blob], "teamsheet.png", { type: "image/png" });
-      const canWebShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
-      if (canWebShare) {
-        try {
-          await navigator.share({ files: [file], title: "チームシート" });
-        } catch (e) {
-          if (e.name !== "AbortError") showImageFallback(url);
-        }
-      } else {
-        showImageFallback(url);
-      }
-    }
-  }
-
-  function renderHistory() {
-    const list = loadHistory();
-    const container = $("history-list");
-    if (!container) return;
-    if (!list.length) {
-      container.innerHTML = '<p class="history-empty">保存された画像はありません</p>';
-      return;
-    }
-    container.innerHTML = list.map((item, i) => {
-      const dateText = new Date(item.at).toLocaleString("ja-JP");
-      const hasJson = item && item.json && Array.isArray(item.json.pokemons);
-      const btn = hasJson
-        ? `<button type="button" class="btn-edit-party" data-history-index="${i}">このパーティを編集</button>`
-        : `<button type="button" class="btn-edit-party" disabled>過去バージョン画像</button>`;
-      const imgHtml = item.dataUrl
-        ? `<img src="${item.dataUrl}" alt="過去のシート ${i + 1}">`
-        : `<p class="history-no-image">画像なし（パーティデータのみ）</p>`;
-      return `
-      <div class="history-item">
-        ${imgHtml}
-        <div class="history-meta">
-          <span class="history-date">${dateText}</span>
-          ${btn}
-        </div>
-      </div>`;
-    }).join("");
-
-    container.querySelectorAll(".btn-edit-party[data-history-index]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.getAttribute("data-history-index"), 10);
-        const items = loadHistory();
-        const target = items[idx];
-        if (target && target.json) {
-          openSheetWithJson(target.json, idx);
+  function openSheetWithRecognitionResult(result) {
+    activeSlotIndex = null;
+    sheetOrigin = "menu";
+    sheetDirty = false;
+    loadSavedInputs();
+    state.recognitionAttempted = result !== null && Array.isArray(result) && result.length >= 6;
+    if (result && Array.isArray(result)) {
+      result.forEach((r, i) => {
+        const slot = state.pokemons[i];
+        if (!slot) return;
+        slot.dexNo = r.dexNo;
+        slot.name = r.name || null;
+        slot.cp = r.cp != null ? String(r.cp) : "";
+        slot.isShadow = !!r.isShadow;
+        slot.isLight = !!r.isLight;
+        if (r.dexNo && DataService) {
+          const p = DataService.getPokemonByDexNo(r.dexNo);
+          if (p) {
+            const def = DataService.getDefaultMoves(p);
+            slot.fast = def.fast || "";
+            slot.charge1 = def.charge1 || "";
+            slot.charge2 = def.charge2 || "";
+            slot.third = def.third || "";
+          }
         }
       });
-    });
+    } else {
+      state.pokemons = emptyPokemons();
+    }
+    bindSheetForm();
+    updateEngToggleUI();
+    renderPokemonSlots("pokemon-slots");
+    showScreen("sheet");
   }
 
-  $("btn-back-history").addEventListener("click", () => showScreen("entrance"));
+  function bindSheetForm() {
+    const handle = $("input-handle");
+    const trainer = $("input-trainer");
+    const friend = $("input-friendcode");
+    if (handle) {
+      handle.value = state.handleName;
+      handle.oninput = () => { state.handleName = handle.value; sheetDirty = true; };
+    }
+    if (trainer) {
+      trainer.value = state.trainerName;
+      trainer.oninput = () => { state.trainerName = trainer.value; sheetDirty = true; };
+    }
+    if (friend) {
+      friend.value = state.friendCode;
+      friend.oninput = () => {
+        friend.value = friend.value.replace(/\D/g, "");
+        state.friendCode = friend.value;
+        sheetDirty = true;
+      };
+    }
+  }
 
-  function initSheetNote() {
-    const el = document.getElementById("sheet-note");
-    if (!el) return;
-    const lines = [
-      (CONFIG && CONFIG.labelSheetNote1) || "",
-      (CONFIG && CONFIG.labelSheetNote2) || "",
-      (CONFIG && CONFIG.labelSheetNote3) || "",
-    ].filter(s => s.trim() !== "");
-    el.innerHTML = lines.join("<br>");
-    el.style.display = lines.length ? "" : "none";
+  function clearAllMoves(containerId) {
+    const slotState = getSlotState(containerId || "pokemon-slots");
+    slotState.pokemons.forEach((p) => {
+      p.fast = ""; p.charge1 = ""; p.charge2 = ""; p.third = "";
+    });
+    if (containerId === "log-pokemon-slots") logState.dirty = true;
+    else sheetDirty = true;
+    renderPokemonSlots(containerId || "pokemon-slots");
   }
 
   function updateEngToggleUI() {
@@ -1369,48 +699,712 @@
     if (lbl) lbl.textContent = state.engOutput ? "ON" : "OFF";
   }
 
-  function initEngToggle() {
-    loadSavedInputs(); // engOutput をロード
-    updateEngToggleUI();
-    const btn = $("toggle-eng-output");
-    if (!btn) return;
-    btn.addEventListener("click", () => {
-      state.engOutput = !state.engOutput;
-      updateEngToggleUI();
-      saveInputs();
-    });
-  }
-
   function updateMoveBugToggleUI() {
     const btn = $("toggle-move-bug");
-    if (!btn) return;
-    btn.setAttribute("aria-checked", state.moveBugMode ? "true" : "false");
-    const lbl = btn.querySelector(".toggle-label-text");
-    if (lbl) lbl.textContent = state.moveBugMode ? "ON" : "OFF";
+    if (btn) {
+      btn.setAttribute("aria-checked", state.moveBugMode ? "true" : "false");
+      const lbl = btn.querySelector(".toggle-label-text");
+      if (lbl) lbl.textContent = state.moveBugMode ? "ON" : "OFF";
+    }
+    const btnLog = $("toggle-move-bug-log");
+    if (btnLog) {
+      btnLog.setAttribute("aria-checked", logState.moveBugMode ? "true" : "false");
+      const lbl = btnLog.querySelector(".toggle-label-text");
+      if (lbl) lbl.textContent = logState.moveBugMode ? "ON" : "OFF";
+    }
   }
 
-  function initMoveBugToggle() {
-    updateMoveBugToggleUI();
-    const btn = $("toggle-move-bug");
-    if (!btn || btn.dataset.bound === "1") return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", () => {
-      state.moveBugMode = !state.moveBugMode;
-      updateMoveBugToggleUI();
-      renderPokemonSlots();
+  function confirmUnsaved(message, onSave, onDiscard) {
+    const overlay = $("overlay-unsaved");
+    const msg = $("unsaved-message");
+    if (msg) msg.textContent = message || "変更を保存しますか？";
+    unsavedCallback = { onSave, onDiscard };
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function closeUnsaved() {
+    const overlay = $("overlay-unsaved");
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
+    unsavedCallback = null;
+  }
+
+  function goAfterSheet(targetScreen) {
+    const dest = targetScreen || sheetOrigin || "menu";
+    if (dest === "slots") renderSlots();
+    showScreen(dest);
+  }
+
+  function tryLeaveSheet(targetScreen) {
+    const dest = targetScreen || sheetOrigin || "menu";
+    if (!sheetDirty && activeSlotIndex === null) {
+      goAfterSheet(dest);
+      return;
+    }
+    if (activeSlotIndex !== null && sheetDirty) {
+      confirmUnsaved("パーティの変更を保存しますか？", () => {
+        saveCurrentToSlot(activeSlotIndex);
+        closeUnsaved();
+        sheetDirty = false;
+        goAfterSheet(dest);
+      }, () => {
+        closeUnsaved();
+        sheetDirty = false;
+        activeSlotIndex = null;
+        goAfterSheet(dest);
+      });
+      return;
+    }
+    goAfterSheet(dest);
+  }
+
+  function saveCurrentToSlot(index) {
+    const slots = StorageService.getPartySlots();
+    const existing = slots[index];
+    StorageService.setPartySlot(index, {
+      name: existing && existing.name ? existing.name : "",
+      at: Date.now(),
+      json: buildPartyJson(state),
     });
   }
+
+  async function outputImage() {
+    saveEngOutput();
+    StorageService.recordInputHistory({
+      handleName: state.handleName,
+      trainerName: state.trainerName,
+      friendCode: state.friendCode,
+    });
+    showProgress();
+    try {
+      await document.fonts.ready;
+      outputBlob = await SheetRender.renderToBlob(state, setProgress);
+    } catch (e) {
+      console.error("[画像出力]", e);
+      hideProgress();
+      return;
+    }
+    hideProgress();
+    if (outputBlobUrl) URL.revokeObjectURL(outputBlobUrl);
+    try {
+      const file = new File([outputBlob], "6-3sheet.png", { type: "image/png" });
+      outputBlobUrl = URL.createObjectURL(file);
+    } catch (_) {
+      outputBlobUrl = URL.createObjectURL(outputBlob);
+    }
+    openOutputOverlay();
+  }
+
+  function openOutputOverlay() {
+    const overlay = $("overlay-output");
+    const container = $("output-overlay-content");
+    if (!overlay || !container) return;
+    container.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = outputBlobUrl;
+    img.alt = "6-3sheet";
+    container.appendChild(img);
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function closeOutputOverlay() {
+    const overlay = $("overlay-output");
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
+  }
+
+  function downloadOutputImage() {
+    if (!outputBlob) return;
+    const url = outputBlobUrl || URL.createObjectURL(outputBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "6-3sheet.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile) {
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(`<html><head><title>6-3sheet</title></head><body style="margin:0;background:#eee;"><img src="${url}" alt="6-3sheet" style="max-width:100%;height:auto;"></body></html>`);
+        win.document.close();
+      }
+    }
+  }
+
+  function exportCacheData() {
+    const data = StorageService.exportBackup();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Ku6-3naTool.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function importCacheData() {
+    const input = $("input-backup");
+    if (input) input.click();
+  }
+
+  async function onBackupFileChosen(e) {
+    const file = e.target && e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (_) {
+      alert("JSONを読み込めませんでした");
+      return;
+    }
+    if (!confirm("現在の保存データを置き換えます。よろしいですか？")) return;
+    const result = StorageService.importBackup(data);
+    if (!result.ok) {
+      alert(result.error || "インポートに失敗しました");
+      return;
+    }
+    renderSlots({ stagger: false });
+  }
+
+  function openSlotPicker() {
+    const overlay = $("overlay-slot-picker");
+    const grid = $("slot-picker-grid");
+    const slots = StorageService.getPartySlots();
+    grid.innerHTML = slots.map((s, i) => {
+      const label = s ? (s.name || "スロット" + (i + 1)) : "空きスロット " + (i + 1);
+      return `<button type="button" class="slot-picker-btn${s ? " has-data" : ""}" data-slot-index="${i}">${escapeHtml(label)}</button>`;
+    }).join("");
+    grid.querySelectorAll(".slot-picker-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-slot-index"), 10);
+        const slots = StorageService.getPartySlots();
+        if (slots[idx]) {
+          pendingSlotSaveIndex = idx;
+          closeSlotPicker();
+          openSlotConfirm();
+        } else {
+          doSaveToSlot(idx);
+        }
+      });
+    });
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function closeSlotPicker() {
+    const overlay = $("overlay-slot-picker");
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
+  }
+  function openSlotConfirm() {
+    $("overlay-slot-confirm").classList.add("active");
+    $("overlay-slot-confirm").setAttribute("aria-hidden", "false");
+  }
+  function closeSlotConfirm() {
+    const overlay = $("overlay-slot-confirm");
+    if (overlay) { overlay.classList.remove("active"); overlay.setAttribute("aria-hidden", "true"); }
+    pendingSlotSaveIndex = null;
+  }
+  function doSaveToSlot(index) {
+    const slots = StorageService.getPartySlots();
+    const existing = slots[index];
+    StorageService.setPartySlot(index, {
+      name: existing && existing.name ? existing.name : "",
+      at: Date.now(),
+      json: buildPartyJson(state),
+    });
+    closeSlotPicker();
+    closeSlotConfirm();
+    pendingSlotSaveIndex = null;
+  }
+
+  function renderSlotPokemonRow(json) {
+    const basePath = getBasePath();
+    if (!json || !Array.isArray(json.pokemons)) {
+      return Array(6).fill('<span class="slot-empty"></span>').join("");
+    }
+    return json.pokemons.map((p) => {
+      if (!p || p.dex == null) return '<span class="slot-empty"></span>';
+      const pm = DataService ? DataService.getPokemonByDexNo(String(p.dex)) : null;
+      const pic = pm && pm.picPath ? basePath.replace(/\/?$/, "/") + pm.picPath : basePath + "Image/Pic/Question_Mark.png";
+      return `<img src="${pic}" alt="" onerror="this.style.opacity='0.3'">`;
+    }).join("");
+  }
+
+  function renderSlots(opts) {
+    const container = $("slot-list");
+    const slots = StorageService.getPartySlots();
+    container.innerHTML = slots.map((s, i) => {
+      const name = s ? (s.name || "パーティ" + (i + 1)) : "空きスロット";
+      const date = s ? new Date(s.at).toLocaleString("ja-JP") : "";
+      const pics = s ? renderSlotPokemonRow(s.json) : Array(6).fill('<span class="slot-empty"></span>').join("");
+      const emptyClass = s ? "" : " data-slot-empty";
+      const deleteBtn = s ? `<button type="button" class="btn-role btn-danger" data-action="delete" data-index="${i}">削除</button>` : "";
+      const renameBtn = s ? `<button type="button" class="btn-role btn-secondary" data-action="rename" data-index="${i}">名前編集</button>` : "";
+      return `
+        <div class="data-slot-card${emptyClass}" data-slot-index="${i}">
+          <button type="button" class="data-slot-handle" aria-label="並べ替え" data-index="${i}">
+            <span class="data-slot-handle-bars" aria-hidden="true"></span>
+          </button>
+          <div class="data-slot-body" data-action="open" data-index="${i}">
+            <div class="data-slot-header">
+              <span class="data-slot-name">${escapeHtml(name)}</span>
+              <span class="data-slot-date">${escapeHtml(date)}</span>
+            </div>
+            <div class="data-slot-pokemon">${pics}</div>
+          </div>
+          <div class="data-slot-actions">
+            ${renameBtn}
+            ${deleteBtn}
+          </div>
+        </div>`;
+    }).join("");
+
+    container.querySelectorAll("[data-action='open']").forEach((el) => {
+      const idx = parseInt(el.getAttribute("data-index"), 10);
+      const slot = slots[idx];
+      if (!slot) return;
+      bindSlotTouch(el, () => openSheetWithJson(slot.json, idx));
+    });
+    container.querySelectorAll("[data-action='rename']").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openNameEdit(parseInt(btn.getAttribute("data-index"), 10));
+      });
+    });
+    container.querySelectorAll("[data-action='delete']").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute("data-index"), 10);
+        if (confirm("このスロットを空にしますか？")) {
+          StorageService.clearPartySlot(idx);
+          renderSlots({ stagger: false });
+        }
+      });
+    });
+    bindSlotReorder(container);
+    if (opts && opts.stagger === false) return;
+    if (window.AnimService) window.AnimService.initStaggerSlots(container);
+  }
+
+  function bindSlotReorder(container) {
+    let dragEl = null;
+    let startIndex = -1;
+    let dragging = false;
+    let startY = 0;
+
+    function finish(cancel) {
+      if (!dragEl) return;
+      const from = startIndex;
+      const cards = [...container.querySelectorAll(".data-slot-card")];
+      const to = cards.indexOf(dragEl);
+      const moved = dragging && from >= 0 && to >= 0 && from !== to;
+      dragEl.classList.remove("is-dragging");
+      container.classList.remove("is-reordering");
+      dragEl = null;
+      startIndex = -1;
+      dragging = false;
+      if (moved && !cancel) StorageService.reorderPartySlots(from, to);
+      if (moved || cancel) renderSlots({ stagger: false });
+    }
+
+    container.querySelectorAll(".data-slot-handle").forEach((handle) => {
+      handle.addEventListener("pointerdown", (e) => {
+        if (e.button != null && e.button !== 0) return;
+        dragEl = handle.closest(".data-slot-card");
+        startIndex = [...container.querySelectorAll(".data-slot-card")].indexOf(dragEl);
+        dragging = false;
+        startY = e.clientY;
+        handle.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      handle.addEventListener("pointermove", (e) => {
+        if (!dragEl) return;
+        if (!dragging && Math.abs(e.clientY - startY) < 6) return;
+        if (!dragging) {
+          dragging = true;
+          dragEl.classList.add("is-dragging");
+          container.classList.add("is-reordering");
+        }
+        const others = [...container.querySelectorAll(".data-slot-card")].filter((c) => c !== dragEl);
+        let placed = false;
+        for (const el of others) {
+          const r = el.getBoundingClientRect();
+          if (e.clientY < r.top + r.height / 2) {
+            container.insertBefore(dragEl, el);
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) container.appendChild(dragEl);
+      });
+      handle.addEventListener("pointerup", () => finish(false));
+      handle.addEventListener("pointercancel", () => finish(true));
+    });
+  }
+
+  function openNameEdit(index) {
+    nameEditSlotIndex = index;
+    const slots = StorageService.getPartySlots();
+    const input = $("name-edit-input");
+    if (input) input.value = (slots[index] && slots[index].name) || "";
+    $("overlay-name-edit").classList.add("active");
+    $("overlay-name-edit").setAttribute("aria-hidden", "false");
+    if (input) input.focus();
+  }
+  function closeNameEdit() {
+    $("overlay-name-edit").classList.remove("active");
+    $("overlay-name-edit").setAttribute("aria-hidden", "true");
+    nameEditSlotIndex = null;
+  }
+
+  function renderLogList() {
+    const container = $("log-list");
+    const logs = StorageService.getBattleLogs();
+    if (!logs.length) {
+      container.innerHTML = '<p class="list-empty">対戦ログはありません</p>';
+      return;
+    }
+    container.innerHTML = logs.map((log) => {
+      const name = "VS " + (log.opponent || "???");
+      const date = new Date(log.at).toLocaleString("ja-JP");
+      const pics = renderSlotPokemonRow(log.json);
+      return `
+        <div class="data-slot-card" data-log-id="${escapeHtml(log.id)}">
+          <div class="data-slot-body" data-action="edit-log">
+            <div class="data-slot-header">
+              <span class="data-slot-name">${escapeHtml(name)}</span>
+              <span class="data-slot-date">${escapeHtml(date)}</span>
+            </div>
+            <div class="data-slot-pokemon">${pics}</div>
+          </div>
+          <div class="data-slot-actions">
+            <button type="button" class="btn-role btn-danger" data-action="delete-log">削除</button>
+          </div>
+        </div>`;
+    }).join("");
+
+    container.querySelectorAll(".data-slot-card").forEach((card) => {
+      const id = card.getAttribute("data-log-id");
+      const body = card.querySelector("[data-action='edit-log']");
+      bindSlotTouch(body, () => openLogEdit(id));
+      card.querySelector("[data-action='delete-log']").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm("この対戦ログを削除しますか？")) {
+          StorageService.deleteBattleLog(id);
+          renderLogList();
+        }
+      });
+    });
+    if (window.AnimService) window.AnimService.initStaggerSlots(container);
+  }
+
+  function openLogEdit(id) {
+    if (id) {
+      const log = StorageService.getBattleLogs().find((l) => l.id === id);
+      if (!log) return;
+      logState.id = log.id;
+      logState.opponent = log.opponent || "";
+      logState.moveBugMode = false;
+      applyLogJson(log.json || { pokemons: [] });
+    } else {
+      logState.id = null;
+      logState.opponent = "";
+      logState.moveBugMode = false;
+      logState.pokemons = emptyPokemons();
+      logState.dirty = false;
+    }
+    const opp = $("input-opponent");
+    if (opp) {
+      opp.value = logState.opponent;
+      opp.oninput = () => { logState.opponent = opp.value; logState.dirty = true; };
+    }
+    updateMoveBugToggleUI();
+    renderPokemonSlots("log-pokemon-slots");
+    showScreen("logEdit");
+  }
+
+  function saveLog() {
+    const entry = {
+      id: logState.id || StorageService.newId(),
+      at: Date.now(),
+      opponent: logState.opponent || "",
+      json: buildLogJson(),
+    };
+    StorageService.saveBattleLog(entry);
+    logState.dirty = false;
+    showScreen("logList");
+    renderLogList();
+  }
+
+  function tryLeaveLogEdit() {
+    if (!logState.dirty) {
+      showScreen("logList");
+      return;
+    }
+    confirmUnsaved("対戦ログの変更を保存しますか？", () => {
+      saveLog();
+      closeUnsaved();
+    }, () => {
+      closeUnsaved();
+      logState.dirty = false;
+      showScreen("logList");
+    });
+  }
+
+  function openRecallMenu(field, anchorEl) {
+    recallField = field;
+    const history = StorageService.getInputHistory();
+    const items = history[field] || [];
+    const menu = $("recall-menu");
+    const overlay = $("overlay-recall");
+    if (!items.length) {
+      menu.innerHTML = '<div class="recall-empty">履歴がありません</div>';
+    } else {
+      menu.innerHTML = items.map((v) => `<button type="button" class="recall-item" data-value="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join("");
+      menu.querySelectorAll(".recall-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const val = btn.getAttribute("data-value");
+          if (field === "handleName") { state.handleName = val; if ($("input-handle")) $("input-handle").value = val; }
+          if (field === "trainerName") { state.trainerName = val; if ($("input-trainer")) $("input-trainer").value = val; }
+          if (field === "friendCode") { state.friendCode = val; if ($("input-friendcode")) $("input-friendcode").value = val; }
+          sheetDirty = true;
+          closeRecallMenu();
+        });
+      });
+    }
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.top = rect.bottom + 4 + "px";
+    menu.style.right = Math.max(8, window.innerWidth - rect.right) + "px";
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+  function closeRecallMenu() {
+    $("overlay-recall").classList.remove("active");
+    $("overlay-recall").setAttribute("aria-hidden", "true");
+    recallField = null;
+  }
+
+  function initGuide() {
+    const container = $("guide-sections");
+    if (!container || !CONFIG || !CONFIG.guideSections) return;
+    container.innerHTML = CONFIG.guideSections.map((g, i) => `
+      <article class="guide-phase"${i === 0 ? "" : " data-reveal"}>
+        <p class="guide-phase-num">${escapeHtml(g.num)}</p>
+        <h3 class="guide-phase-title">${escapeHtml(g.title)}</h3>
+        <p class="guide-phase-lead">${escapeHtml(g.lead)}</p>
+        ${g.image ? `<figure class="guide-phase-figure"><img src="${g.image}" alt="${escapeHtml(g.imageAlt || "")}" width="340" height="600" loading="lazy"></figure>` : ""}
+      </article>
+      ${i < CONFIG.guideSections.length - 1 ? '<div class="lp-connector" aria-hidden="true"></div>' : ""}
+    `).join("");
+    if (window.AnimService) window.AnimService.initRevealObserver();
+  }
+
+  function initScanHelp() {
+    const container = $("scan-help-sections");
+    if (!container || !CONFIG || !CONFIG.scanHelpSections) return;
+    container.innerHTML = `<h2 class="section-title">上手くいかない時は</h2>` +
+      CONFIG.scanHelpSections.map((s) => `
+        <div class="scan-help-section">
+          <h3>${escapeHtml(s.title)}</h3>
+          <p>${s.body.replace(/\n/g, "<br>")}</p>
+        </div>`).join("");
+  }
+
+  function initMenu() {
+    const versionEl = $("app-version");
+    if (versionEl && CONFIG && CONFIG.appVersion) versionEl.textContent = CONFIG.appVersion;
+    const shareBtn = $("btn-share-x");
+    if (shareBtn) {
+      const text = "Ku6-3naToolで6-3見せ合いシートを作っています\nhttps://kurosana.github.io/ku6-3naTool/";
+      shareBtn.href = "https://x.com/intent/post?text=" + encodeURIComponent(text);
+    }
+  }
+
+  function initVersionPage() {
+    const num = $("version-current-num");
+    if (num && CONFIG && CONFIG.appVersion) num.textContent = CONFIG.appVersion;
+    const list = $("version-changelog");
+    if (!list || !CONFIG || !Array.isArray(CONFIG.appChangelog)) return;
+    list.innerHTML = CONFIG.appChangelog.map((entry) => `
+      <article class="version-block">
+        <h2>${escapeHtml(entry.version || "")}</h2>
+        <ul>${(entry.changes || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+      </article>
+    `).join("");
+  }
+
+  function initImageInput() {
+    $("input-image").addEventListener("change", async (e) => {
+      const file = e.target && e.target.files[0];
+      e.target.value = "";
+      if (!file || !file.type.startsWith("image/")) return;
+      beginRecognitionProgress();
+      await waitForPaint();
+      const img = new Image();
+      try {
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("image_load_failed"));
+          img.src = URL.createObjectURL(file);
+        });
+        const result = await Recognition.recognize(img, { onProgress: setProgress });
+        openSheetWithRecognitionResult(result);
+      } catch (err) {
+        const failed = Array(6).fill(null).map(() => ({ dexNo: null, name: null, cp: null, isShadow: false, isLight: false }));
+        openSheetWithRecognitionResult(err && err.message === "image_load_failed" ? null : failed);
+      } finally {
+        endRecognitionProgress();
+      }
+    });
+  }
+
+  function initEventListeners() {
+    $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
+    $("btn-to-version").addEventListener("click", () => showScreen("version"));
+    $("btn-back-version").addEventListener("click", () => showScreen("top"));
+    $("btn-back-top").addEventListener("click", () => showScreen("top"));
+    $("btn-new-party").addEventListener("click", openSheetFresh);
+    $("btn-slots").addEventListener("click", () => { renderSlots(); showScreen("slots"); });
+    $("btn-battle-logs").addEventListener("click", () => { renderLogList(); showScreen("logList"); });
+    $("btn-back-sheet").addEventListener("click", () => tryLeaveSheet(sheetOrigin));
+    $("btn-to-scan").addEventListener("click", () => showScreen("scan"));
+    $("btn-back-scan").addEventListener("click", () => showScreen("sheet"));
+    $("btn-load-image").addEventListener("click", () => $("input-image").click());
+    $("btn-scan-example").addEventListener("click", () => {
+      $("overlay-scan-example").classList.add("active");
+      $("overlay-scan-example").setAttribute("aria-hidden", "false");
+    });
+    $("overlay-scan-example").addEventListener("click", () => {
+      $("overlay-scan-example").classList.remove("active");
+      $("overlay-scan-example").setAttribute("aria-hidden", "true");
+    });
+    $("btn-back-slots").addEventListener("click", () => showScreen("menu"));
+    $("btn-export-data").addEventListener("click", exportCacheData);
+    $("btn-import-data").addEventListener("click", importCacheData);
+    $("input-backup").addEventListener("change", onBackupFileChosen);
+    $("btn-back-log-list").addEventListener("click", () => showScreen("menu"));
+    $("btn-new-log").addEventListener("click", () => openLogEdit(null));
+    $("btn-back-log-edit").addEventListener("click", tryLeaveLogEdit);
+    $("btn-save-log").addEventListener("click", saveLog);
+    $("btn-output").addEventListener("click", outputImage);
+    $("btn-close-output").addEventListener("click", closeOutputOverlay);
+    $("output-backdrop").addEventListener("click", closeOutputOverlay);
+    $("btn-download-image").addEventListener("click", downloadOutputImage);
+    $("btn-save-to-slot").addEventListener("click", openSlotPicker);
+    $("btn-slot-picker-cancel").addEventListener("click", closeSlotPicker);
+    $("slot-picker-backdrop").addEventListener("click", closeSlotPicker);
+    $("btn-slot-confirm-back").addEventListener("click", closeSlotConfirm);
+    $("slot-confirm-backdrop").addEventListener("click", closeSlotConfirm);
+    $("btn-slot-confirm-save").addEventListener("click", () => {
+      if (pendingSlotSaveIndex !== null) doSaveToSlot(pendingSlotSaveIndex);
+    });
+    $("btn-name-edit-cancel").addEventListener("click", closeNameEdit);
+    $("name-edit-backdrop").addEventListener("click", closeNameEdit);
+    $("btn-name-edit-save").addEventListener("click", () => {
+      if (nameEditSlotIndex !== null) {
+        StorageService.renamePartySlot(nameEditSlotIndex, $("name-edit-input").value);
+        renderSlots();
+        closeNameEdit();
+      }
+    });
+    $("btn-unsaved-discard").addEventListener("click", () => {
+      if (unsavedCallback && unsavedCallback.onDiscard) unsavedCallback.onDiscard();
+    });
+    $("btn-unsaved-save").addEventListener("click", () => {
+      if (unsavedCallback && unsavedCallback.onSave) unsavedCallback.onSave();
+    });
+    $("unsaved-backdrop").addEventListener("click", closeUnsaved);
+    $("recall-backdrop").addEventListener("click", closeRecallMenu);
+    document.querySelectorAll(".btn-recall").forEach((btn) => {
+      btn.addEventListener("click", () => openRecallMenu(btn.getAttribute("data-recall"), btn));
+    });
+    $("btn-copy-json").addEventListener("click", async () => {
+      const ok = await copyJsonToClipboard();
+      const btn = $("btn-copy-json");
+      const orig = btn.textContent;
+      btn.textContent = ok ? "コピーしました" : "コピー失敗";
+      btn.classList.toggle("copied", ok);
+      btn.classList.toggle("copy-failed", !ok);
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied", "copy-failed"); }, 2000);
+    });
+    $("btn-clear-moves").addEventListener("click", () => clearAllMoves("pokemon-slots"));
+    $("btn-clear-moves-log").addEventListener("click", () => clearAllMoves("log-pokemon-slots"));
+    $("toggle-eng-output").addEventListener("click", () => {
+      state.engOutput = !state.engOutput;
+      updateEngToggleUI();
+      saveEngOutput();
+    });
+    $("toggle-move-bug").addEventListener("click", () => {
+      state.moveBugMode = !state.moveBugMode;
+      updateMoveBugToggleUI();
+      renderPokemonSlots("pokemon-slots");
+    });
+    $("toggle-move-bug-log").addEventListener("click", () => {
+      logState.moveBugMode = !logState.moveBugMode;
+      updateMoveBugToggleUI();
+      renderPokemonSlots("log-pokemon-slots");
+    });
+    $("btn-close-search").addEventListener("click", closeSearchOverlay);
+    $("btn-close-move-search").addEventListener("click", closeMoveSearchOverlay);
+    $("btn-json-error-ok").addEventListener("click", hideJsonErrorOverlay);
+    $("overlay-json-error").addEventListener("click", (e) => {
+      if (e.target.classList.contains("json-error-backdrop")) hideJsonErrorOverlay();
+    });
+    $("search-pokemon").addEventListener("keydown", (e) => { if (e.key === "Escape") closeSearchOverlay(); });
+    $("search-move").addEventListener("keydown", (e) => { if (e.key === "Escape") closeMoveSearchOverlay(); });
+    $("btn-close-debug").addEventListener("click", () => {
+      $("overlay-debug-recognition").classList.remove("active");
+    });
+  }
+
+  // デバッグオーバーレイ（recognition.js から呼ばれる）
+  window.showRecognitionDebug = function (image, results, debugData, layout) {
+    const overlay = $("overlay-debug-recognition");
+    const canvasFull = $("debug-canvas-full");
+    const cellsContainer = $("debug-cells");
+    if (!overlay || !canvasFull || !cellsContainer) return;
+    const w = layout.w;
+    const h = layout.h;
+    const scale = Math.min(380 / w, 520 / h, 1);
+    const cw = Math.round(w * scale);
+    const ch = Math.round(h * scale);
+    canvasFull.width = cw;
+    canvasFull.height = ch;
+    const ctx = canvasFull.getContext("2d");
+    ctx.drawImage(image, 0, 0, w, h, 0, 0, cw, ch);
+    const zones = layout.zones;
+    if (zones) {
+      [zones.cp1, zones.cp2].forEach((arr) => { if (arr) arr.forEach((r) => { ctx.strokeStyle = "rgba(0,100,255,0.9)"; ctx.strokeRect(r.x * scale, r.y * scale, r.w * scale, r.h * scale); }); });
+      [zones.pokemon1, zones.pokemon2].forEach((arr) => { if (arr) arr.forEach((r) => { ctx.strokeStyle = "rgba(255,0,0,0.9)"; ctx.strokeRect(r.x * scale, r.y * scale, r.w * scale, r.h * scale); }); });
+    }
+    const threshold = (CONFIG && CONFIG.imageMatchThreshold) || 0.65;
+    cellsContainer.innerHTML = (debugData || []).map((d) => {
+      const name = (d.match && d.match.name) ? d.match.name : "未認識";
+      const cpText = d.cp != null ? "CP " + d.cp : "CP ---";
+      return `<div class="debug-cell-item"><p class="debug-cell-info">スロット${d.index + 1}: ${escapeHtml(name)} ${d.bestScore != null ? d.bestScore.toFixed(3) : "-"}</p><p class="debug-cell-info">${cpText}</p></div>`;
+    }).join("");
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  };
 
   async function boot() {
     try {
+      StorageService.migrateFromLegacy();
       await DataService.loadAll();
     } catch (e) {
       console.error(e);
     }
-    initSheetNote();
-    initEngToggle();
-    initEntrance();
-    showScreen("entrance");
+    initGuide();
+    initScanHelp();
+    initMenu();
+    initVersionPage();
+    initImageInput();
+    initEventListeners();
+    loadSavedInputs();
+    updateEngToggleUI();
+    showScreen("top");
   }
 
   if (document.readyState === "loading") {

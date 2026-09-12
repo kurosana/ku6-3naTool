@@ -1,123 +1,264 @@
 /**
  * チームシートツール 設定ファイル
- * 説明文や閾値など、運用で変更しやすい項目をここにまとめています。
- * 必要に応じてこのファイルだけ編集してください。
  */
 
 const CONFIG = {
-  // ========== デバッグ ==========
-  // 1 にすると画像認識のデバッグモードがON。読み込んだ画像の切り取り範囲・判定結果をオーバーレイで表示します。
   debugRecognition: 0,
 
-  // ========== バージョン表記 ==========
-  appVersion: "v2.4.0",
-  // アップデート情報（メイン画面左上・バージョンの下に表示。空文字 "" にすると非表示）
-  appReleaseNotes: "出力履歴機能の追加・ガマゲロゲなど新強化対応",
+  appVersion: "v3.0.0",
+  appReleaseNotes: "UI全面改修・保存スロット10件・対戦ログ・メガ風デザイン",
 
-  // ========== エントランス画面の説明文 ==========
-  // 中央に大きく表示するメインコメント（空文字 "" にすると非表示）
-  entranceMainComment: "お気に入り★の画像認識対応！",
-  // エントランス画面のフォントサイズ（px）
-  entranceFontSizeVersion: 11,
-  entranceFontSizeReleaseNotes: 11,
-  entranceFontSizeMainComment: 22,
-  // 画像読み込みについての説明（画面下部に表示）
-  imageLoadExplanation: "6匹のポケモンだけが映ったタグのスクリーンショットをトリミングせず読み込ませてください",
+  // ユーザー向け変更履歴（新しいバージョンは先頭に追記）
+  appChangelog: [
+    {
+      version: "v3.0.0",
+      changes: [
+        "トップから保存・対戦ログまでの画面をメガ風パステルUIに刷新しました。",
+        "パーティを10件保存でき、並べ替え・削除・インポート／エクスポートができます。",
+        "対戦ログを残せるようになりました。",
+        "サイトの使い方ガイドと、Xでの共有を追加しました。",
+        "出力画像はプレビューの長押し、または「画像保存」で 6-3sheet.png として保存できます。",
+        "画面の横幅に合わせてパーティ入力の配置が変わるようにしました。",
+        "バージョン情報ページを追加しました。",
+      ],
+    },
+    {
+      version: "v2.4.0",
+      changes: [
+        "メガシンカの表示に対応し、画像認識素材とポケモンデータを大きく追加しました。",
+      ],
+    },
+    {
+      version: "v2.3.4",
+      changes: [
+        "ポケモンのわざデータを修正しました。",
+      ],
+    },
+    {
+      version: "v2.3.2",
+      changes: [
+        "画像認識素材を追加し、ポケモンデータを更新しました。",
+      ],
+    },
+    {
+      version: "v2.3.1",
+      changes: [
+        "画像認識素材を追加し、jsonからの開始などに対応しました。",
+      ],
+    },
+    {
+      version: "v2.3.0",
+      changes: [
+        "画像認識の精度を改善しました。",
+      ],
+    },
+    {
+      version: "v2.2.0",
+      changes: [
+        "画像認識の処理を改善しました。",
+      ],
+    },
+    {
+      version: "v2.1.0",
+      changes: [
+        "お気に入りつき認識の扱いを見直し、素材を追加しました。",
+      ],
+    },
+    {
+      version: "v2.0.0",
+      changes: [
+        "お気に入りマーク付きポケモンの画像認識に対応しました。",
+      ],
+    },
+    {
+      version: "v1.4.6",
+      changes: [
+        "ポケモンのわざデータを更新しました。",
+      ],
+    },
+    {
+      version: "v1.4.5",
+      changes: [
+        "入力まわりの不具合を修正しました。",
+      ],
+    },
+    {
+      version: "v1.4.4",
+      changes: [
+        "空きスロットなどの表示を調整しました。",
+      ],
+    },
+    {
+      version: "v1.4.1",
+      changes: [
+        "過去のパーティを呼び出して作り直せるようにしました。",
+      ],
+    },
+    {
+      version: "v1.3.2",
+      changes: [
+        "ポケモンのわざデータを更新しました。",
+      ],
+    },
+    {
+      version: "v1.3.1",
+      changes: [
+        "画像認識素材を追加しました。",
+      ],
+    },
+    {
+      version: "v1.2.1",
+      changes: [
+        "英語で出力できるようになりました。",
+      ],
+    },
+    {
+      version: "v1.1.10",
+      changes: [
+        "出力テンプレートを更新し、ポケモンデータを修正しました。",
+      ],
+    },
+    {
+      version: "v1.1.0",
+      changes: [
+        "画像認識の開始まわりを改善しました。",
+      ],
+    },
+    {
+      version: "v1.0.1",
+      changes: [
+        "Android端末での画像認識位置合わせを改善しました。",
+      ],
+    },
+    {
+      version: "v1.0.0",
+      changes: [
+        "チームシートの作成と画像認識を公開しました。",
+      ],
+    },
+  ],
 
   // ========== 画像認識 ==========
-  // テンプレート画像との一致度の閾値（0～1）。これより類似度が高いとマッチと判定
   imageMatchThreshold: 0.65,
-  // 背景を相関から除外する（テンプレートの透明部分のみ）
   recognitionIgnoreBackground: 1,
-  // ========== ゾーン基準の画像認識（検索バー検出→基準高さ→ゾーン分割） ==========
   recognitionSearchTemplatePath: "Image/Match/Searching.png",
   recognitionSearchBarColor: "#e7f4e0",
   recognitionSearchBarTolerance: 25,
-  // 基準高さ(refY)の下から: nピクセル空けてCP1, mピクセル高さCP1, lピクセル高さポケモン1, kピクセル空けてCP2。2段目も同様
-  // ※ピクセル値は recognitionRefHeight のスクリーン高さを基準にした値。異なる解像度でも自動スケールされる
   recognitionZoneN: 180,
   recognitionZoneM: 65,
   recognitionZoneL: 207,
   recognitionZoneK: 155,
-  // ゾーンパラメータの基準スクリーン高さ（ピクセル）。読み込み画像の高さに合わせて自動スケールされる
   recognitionRefHeight: 2556,
-  // ゾーンパラメータの基準スクリーン横幅（ピクセル）。縦スケール後の横幅と比較して横方向のスケールも計算する
   recognitionRefWidth: 1179,
-  // Android ナビゲーションバー三角アイコンの検知テンプレートパス
   recognitionAndroidTrianglePath: "Image/Match/Android_triangle.png",
-  // Android 三角検知時のテンプレートマッチング閾値
   recognitionAndroidTriangleThreshold: 0.55,
-  // 左右の濃い背景を除く。コンテンツ幅 = 画像幅 * contentWidthPct、左端 = 画像幅 * contentLeftPct
   recognitionContentLeftPct: 0.06,
   recognitionContentWidthPct: 0.88,
-  // CP認識の右側重み付け（一の位の判別精度向上）
-  // 右から recognitionCpRightWeightPct % のピクセルを recognitionCpRightWeight 倍の重みで判定
   recognitionCpRightWeightPct: 0.3,
   recognitionCpRightWeight: 3.0,
-  // 背景とみなす色（明るいグラデーション・検索欄）
   recognitionBgGrayMin: 248,
-  // ポケモン切り抜き: 連結成分で★等の小さな分離マークを除外（0=従来方式）
   recognitionUseConnectedComponent: 1,
-  // 最大連結成分に対する採用閾値（これ未満の小成分=★・炎アイコン等を除外）
   recognitionPokemonMinComponentRatio: 0.12,
-  // ★除外: ポケモンゾーン右上隅の範囲（相対比率）
   recognitionStarCornerTopPct: 0.22,
   recognitionStarCornerRightPct: 0.28,
-  // ★除外: 上部バンド（X非依存）と星ブロブ判定
   recognitionStarTopBandPct: 0.35,
   recognitionStarMaskTopBandPct: 0.22,
-  // ★色プリ除去マスクのX下限（★は常に右上のため左側の羽等を保全）
   recognitionStarMaskLeftPct: 0.55,
   recognitionStarComponentMaxSizeRatio: 0.5,
   recognitionStarPixelFracInComponent: 0.4,
   recognitionShadowCornerBottomPct: 0.25,
   recognitionShadowCornerLeftPct: 0.28,
-  // CP認識: 外接矩形からお気に入り★の黄色ピクセルを除外（0=従来方式）
   recognitionExcludeStarFromCP: 1,
-  // CP認識: ★除外時に bbox 算出する CP ゾーン左側の幅比率（CP 文字列は左寄せ）
   recognitionCpBBoxMaxWidthPct: 0.85,
-  // CP認識: ★除外時に bbox 算出する CP ゾーン上側の高さ比率（★は下から CP ゾーンへ侵入）
   recognitionCpBBoxMaxHeightPct: 0.85,
-  // Match/CP テンプレート画像の同時読み込み数（リモート配信時の 0～70% 短縮用）
   recognitionTemplateLoadConcurrency: 12,
-  // キャッシュ方針（参考・コード変更なし）:
-  // - Image/Match/** の URL を版間で固定すればブラウザ HTTP キャッシュが版を跨いで流用される
-  // - 版更新で再DLが起きる場合は配信側（版付きパス・短命 Cache-Control）を確認
-  // - iframe 埋め込みでは Service Worker は制約が多いため現状は非採用
 
-  // ========== パス設定（通常は変更不要） ==========
-  // タイプアイコン画像のフォルダ（Data/Type.csv のパスと実フォルダが異なる場合にここを変更）
   typeIconFolder: "Image/Type&shadow",
 
-  // ========== シート出力 ==========
   outputWidth: 1748,
   outputHeight: 2480,
   templatePath: "Image/Template.png",
 
-  // ========== 英語出力フォントサイズ ==========
   outputEngPokemonNameSize: 57,
   outputEngMoveNameSize: 40,
 
-  // ========== 表示用ラベル（必要なら変更可） ==========
   labelRecognitionHint: "※キャッシュがないと少し時間かかります",
   labelRecognitionHint2: "お気に入り対応しましたが認識精度は落ちます",
-  labelSheetNote1: "※画像認識は一部ポケモンしか実装されていません（素材不足）",
-  labelSheetNote2: "→色違い・相棒・24時間以内捕獲・白いポケモンは現状認識不可",
-  labelSheetNote3: "→認識されなかった場合は「画像認識失敗」をタッチして手動でお願いします",
   labelHandleName: "ハンドルネーム",
   labelTrainerName: "トレーナーネーム",
   labelFriendCode: "フレンドコード",
   labelSelectPokemon: "ポケモン選択",
   labelRecognitionFailed: "画像認識失敗",
-  labelOptionalSuffix: "(任意)",
-  labelStartNoMoves: "わざなしで開始",
   labelClearAllMoves: "技を全消去",
   labelCp: "CP",
   labelShadow: "シャドウ",
   labelLight: "ライト",
+
+  // 画像認識ページの説明（HTML可: <a> タグ使用可）
+  scanHelpSections: [
+    {
+      title: "1. 全ポケモンには対応していません。",
+      body: "画像認識用の素材は1つ1つ手作業で作成しているので、全ポケモンには対応できていません。\nまた、通常ポケモンとシャドウポケモンは全く別素材で管理しています。\n\nある程度メジャーなポケモンは対応しているつもりですが、要望があればクロサナ(<a href=\"https://x.com/kurosana309637\" target=\"_blank\" rel=\"noopener noreferrer\">@kurosana309637</a>)までご連絡ください。",
+    },
+    {
+      title: "2. お気に入り以外のマークは非対応",
+      body: "お気に入りマークだけは対応しましたが、それ以外の要素がボックス画面についているとそのポケモンは認識失敗します。\n-色違い\n-相棒リボン\n-ダイマックスマーク\n-24時間以内に捕獲した青い背景\n\nあと、白っぽいポケモンが背景と同化してしまって誤認知される不具合があります。\nガラルサニーゴがマリルリやたいようポワルンなどに化けると報告がありますが、これは技術限界なので許してください。",
+    },
+    {
+      title: "3. 「検索」の文字を検知してます",
+      body: "端末ごとの画面の大きさの違いに対応するために、\n画像認識プログラムはまず検索バーの「検索」の文字を検知してポケモンの場所を特定しています。\nこの文字が画像にないと全部認識失敗してしまいます。",
+    },
+    {
+      title: "4. トリミングしないでください。",
+      body: "端末ごとの画面の大きさの違いに対応するために、\n画像認識プログラムは画像の縦横比からポケモンの位置を割り出しています。\nそのため、以下のような要素があると正常に縦横比を認識できず失敗してしまいます。\n-トリミングして画像の一部分だけを読み込ませている\n-タグに12体以上含まれているなどで、少し上にスクロールしてしまっている\n\n読み込む画像は必ずトリミングなしで、スクロールなどもせずタグの画面を開いたままで使ってください。",
+    },
+  ],
+
+  // 使い方ガイド（スクリーンショットは Image/Guide/ に配置）
+  guideSections: [
+    {
+      num: "01",
+      title: "6-3シートを作成",
+      lead: "トップの「6-3シート作成」からメニューへ進み、「新しく作成」でパーティ入力画面を開きます。",
+      image: "Image/Guide/01-menu.png",
+      imageAlt: "メニュー画面",
+    },
+    {
+      num: "02",
+      title: "ポケモンを入力",
+      lead: "「ポケモン選択」から名前で探して6匹を入れ、CP・シャドウ／ライト・わざを整えます。ひとつずつ手で入力するのが基本です。",
+      image: "Image/Guide/02-sheet.png",
+      imageAlt: "パーティ入力画面",
+    },
+    {
+      num: "03",
+      title: "画像認識で入力",
+      lead: "タグのスクリーンショットがあれば、「画像認識で入力」からまとめて読み込めます。追加の時短手段です。",
+      image: "Image/Guide/03-scan.png",
+      imageAlt: "画像認識画面",
+    },
+    {
+      num: "04",
+      title: "画像を出力",
+      lead: "入力が終わったら「画像出力」。プレビューが表示されるので長押しで保存できます。",
+      image: "Image/Guide/04-output.png",
+      imageAlt: "画像出力プレビュー",
+    },
+    {
+      num: "05",
+      title: "データを保存・呼び出し",
+      lead: "「保存データから作成」で10スロットにパーティを保存・復元できます。",
+      image: "Image/Guide/05-slots.png",
+      imageAlt: "保存スロット画面",
+    },
+    {
+      num: "06",
+      title: "対戦ログを残そう",
+      lead: "「対戦ログ作成」で対戦相手とパーティを50件まで記録できます。",
+      image: "Image/Guide/06-log.png",
+      imageAlt: "対戦ログ画面",
+    },
+  ],
 };
 
-// index.html からの相対パスを返す（ローカル・GitHub Pages 両方対応）
-// fetch / img.src の相対パスはページ（index.html）の URL を起点に解決されるため
-// "./" を返すことで環境によらず正しく動作する
 const getBasePath = () => "./";

@@ -285,9 +285,41 @@ const DataService = (function () {
     return out;
   }
 
+  let searchPriorityDex = [];
+
+  function setSearchPriority(dexNos) {
+    const seen = {};
+    const list = [];
+    (dexNos || []).forEach((d) => {
+      const key = String(d == null ? "" : d).replace(/#+$/, "");
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      list.push(key);
+    });
+    searchPriorityDex = list;
+  }
+
   function searchPokemon(query) {
     const raw = (query || "").trim();
-    if (!raw) return pokemonList.slice(0, 100);
+    if (!raw) {
+      const seen = {};
+      const out = [];
+      searchPriorityDex.forEach((dex) => {
+        const p = getPokemonByDexNo(dex);
+        if (p && !seen[p.dexNo]) {
+          seen[p.dexNo] = true;
+          out.push(p);
+        }
+      });
+      pokemonList.forEach((p) => {
+        if (out.length >= 100) return;
+        if (!seen[p.dexNo]) {
+          seen[p.dexNo] = true;
+          out.push(p);
+        }
+      });
+      return out.slice(0, 100);
+    }
     const qKana = toKatakana(raw.toLowerCase());
     const qRoma = romajiToKatakana(raw);
     return pokemonList.filter((p) => {
@@ -476,6 +508,7 @@ const DataService = (function () {
     getPokemonByDexNo,
     getPokemonByName,
     searchPokemon,
+    setSearchPriority,
     getMovesForPokemon,
     getRegisteredThird,
     isMegaPokemon,

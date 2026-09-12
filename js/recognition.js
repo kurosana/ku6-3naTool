@@ -1192,7 +1192,8 @@ const Recognition = (function () {
   async function recognizeZoneBased(image, options) {
     const onProgress = (options && typeof options.onProgress === "function") ? options.onProgress : function () {};
     onProgress(0);
-    // テンプレート読み込み: 0→70%
+    await yieldToUI();
+    // テンプレート読み込み: 0→70%（キャッシュ済みならすぐ 70%）
     await ensureTemplates((p) => { onProgress(Math.round(p * 0.7)); });
     onProgress(70);
     await yieldToUI();
