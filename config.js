@@ -5,11 +5,17 @@
 const CONFIG = {
   debugRecognition: 0,
 
-  appVersion: "v3.0.4",
+  appVersion: "v3.0.5",
   appReleaseNotes: "UI全面改修・保存スロット10件・対戦ログ・メガ風デザイン",
 
   // ユーザー向け変更履歴（新しいバージョンは先頭に追記）
   appChangelog: [
+    {
+      version: "v3.0.5",
+      changes: [
+        "黄昏の旅路シーズンに合わせて技の優先度を変更しました。",
+      ],
+    },
     {
       version: "v3.0.4",
       changes: [
