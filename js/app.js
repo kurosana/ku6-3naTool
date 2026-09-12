@@ -34,6 +34,7 @@
       fast: "",
       charge1: "",
       charge2: "",
+      third: "",
     })),
   };
 
@@ -341,11 +342,13 @@
             slot.fast = def.fast || "";
             slot.charge1 = def.charge1 || "";
             slot.charge2 = def.charge2 || "";
+            slot.third = def.third || "";
           }
         } else if (state.noMovesMode) {
           slot.fast = "";
           slot.charge1 = "";
           slot.charge2 = "";
+          slot.third = "";
         }
       });
     } else {
@@ -358,6 +361,7 @@
         fast: "",
         charge1: "",
         charge2: "",
+        third: "",
       }));
     }
 
@@ -497,28 +501,39 @@
     container.innerHTML = state.pokemons.map((p, i) => {
       const nameLabel = p.name || (p.dexNo === null ? (state.recognitionAttempted ? labelFailed : labelSelect) : labelFailed);
       var showQuestionMark = state.recognitionAttempted && !p.dexNo;
-      const picSrc = p.dexNo && DataService ? (() => {
-        const pm = DataService.getPokemonByDexNo(p.dexNo);
-        return (pm && pm.picPath) ? basePath.replace(/\/?$/, "/") + pm.picPath : "";
-      })() : "";
+      const pm = p.dexNo && DataService ? DataService.getPokemonByDexNo(p.dexNo) : null;
+      const isMega = !!(pm && DataService.isMegaPokemon(pm));
+      const picSrc = pm && pm.picPath ? basePath.replace(/\/?$/, "/") + pm.picPath : "";
       const picOrPlaceholder = p.dexNo
         ? (picSrc ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${picSrc}" alt="" data-slot="${i}" data-field="img" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`)
         : (showQuestionMark ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">` : "");
-      const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [] };
+      const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [], third: [] };
       const showAllMovesOpt = !!(state.moveBugMode && p.dexNo);
       const fastOpts = buildMoveSelectOptions(moves.fast, p.fast, showAllMovesOpt);
       const charge1Opts = buildMoveSelectOptions(moves.charge, p.charge1, showAllMovesOpt);
       const charge2Opts = buildMoveSelectOptions(moves.charge, p.charge2, showAllMovesOpt);
+      const megaBg = isMega
+        ? `<img class="slot-mega-bg" src="${shadowLightPath}mega_trans.png" alt="" aria-hidden="true">`
+        : "";
+      if (isMega) {
+        p.third = (moves.third && moves.third[0]) || "";
+      } else {
+        p.third = "";
+      }
+      const thirdLabel = p.third && DataService ? DataService.getDisplayMoveName(p.third) : "-";
+      const thirdRow = isMega ? `
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="third"></span><div class="move-select-wrap"><span class="move-fixed-display">${escapeHtml(thirdLabel)}</span></div></div>` : "";
 
       const movesBlock = state.noMovesMode ? "" : `
           <div class="slot-moves">
             <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
             <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>${thirdRow}
           </div>`;
 
       return `
-        <div class="pokemon-slot" data-slot="${i}">
+        <div class="pokemon-slot${isMega ? " slot-mega" : ""}" data-slot="${i}">
+          ${megaBg}
           <div class="slot-name-wrap">
             <div class="slot-pokemon-name slot-name-btn ${!p.name ? "placeholder" : ""}" data-slot="${i}" data-field="name">${escapeHtml(nameLabel)}</div>
           </div>
@@ -554,7 +569,7 @@
         });
       } else if (field === "fast" || field === "charge1" || field === "charge2") {
         el.addEventListener("change", () => {
-          const key = field === "fast" ? "fast" : field === "charge1" ? "charge1" : "charge2";
+          const key = field;
           if (el.value === ALL_MOVES_SENTINEL) {
             // センチネルは状態に入れず、直前の技に戻して全わざ検索を開く
             el.value = state.pokemons[slotIndex][key] || "";
@@ -583,6 +598,10 @@
           renderPokemonSlots();
         });
       }
+    });
+
+    state.pokemons.forEach((p, i) => {
+      if (p.third) updateTypeIcon(i, "third", p.third);
     });
   }
 
@@ -688,10 +707,12 @@
       slot.fast = "";
       slot.charge1 = "";
       slot.charge2 = "";
+      slot.third = "";
     } else {
       slot.fast = def.fast || "";
       slot.charge1 = def.charge1 || "";
       slot.charge2 = def.charge2 || "";
+      slot.third = def.third || "";
     }
     if (!slot.cp && slot.cp !== 0) slot.cp = "";
     renderPokemonSlots();
@@ -721,7 +742,7 @@
       searchInput.focus();
     }
 
-    const kind = field === "fast" ? 0 : 1;
+    const kind = field === "fast" ? 0 : field === "third" ? 2 : 1;
 
     function runMoveSearch(q) {
       const filtered = DataService.searchMoves(q, kind);
@@ -1025,6 +1046,7 @@
         fastMoves: p.fast && DataService ? [DataService.formatMoveForJson(p.fast)].filter(Boolean) : [],
         chargedMoves1: p.charge1 && DataService ? [DataService.formatMoveForJson(p.charge1)].filter(Boolean) : [],
         chargedMoves2: p.charge2 && DataService ? [DataService.formatMoveForJson(p.charge2)].filter(Boolean) : [],
+        thirdMoves: p.third && DataService ? [DataService.formatMoveForJson(p.third)].filter(Boolean) : [],
       };
     });
     return {
@@ -1063,6 +1085,7 @@
         fast: "",
         charge1: "",
         charge2: "",
+        third: "",
       };
       if (src && typeof src === "object") {
         let pm = null;
@@ -1088,19 +1111,11 @@
             if (typeof v === "string") return v;
             return "";
           };
-          const fastToken = pickToken(src.fastMoves);
-          const c1Token = pickToken(src.chargedMoves1);
-          const c2Token = pickToken(src.chargedMoves2);
-
-          const fastJp = fastToken && DataService ? DataService.parseJsonMoveName(fastToken, slot.dexNo) : "";
-          const c1Jp = c1Token && DataService ? DataService.parseJsonMoveName(c1Token, slot.dexNo) : "";
-          const c2Jp = c2Token && DataService ? DataService.parseJsonMoveName(c2Token, slot.dexNo) : "";
-
-          // 技が指定されていない/見つからない場合はデフォルト技を補完
           const def = DataService ? DataService.getDefaultMoves(pm) : { fast: "", charge1: "", charge2: "" };
           slot.fast = fastJp || def.fast || "";
           slot.charge1 = c1Jp || def.charge1 || "";
           slot.charge2 = c2Jp || def.charge2 || "";
+          slot.third = def.third || "";
         }
       }
       slots.push(slot);

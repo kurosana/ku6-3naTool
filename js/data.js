@@ -72,6 +72,7 @@ const DataService = (function () {
       defaultFast: row[4] || "",
       defaultCharge1: row[5] || "",
       defaultCharge2: row[6] || "",
+      megaTag: row[7] || "",
     }));
 
     moveList = parseCSV(moveCsv).map((row) => ({
@@ -156,28 +157,178 @@ const DataService = (function () {
     return str.replace(/[\u3041-\u3096]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
   }
 
+  // ローマ字 → カタカナ（ヘボン式・訓令式。最長一致。DBは増やさない）
+  const ROMAJI_TO_KANA = [
+    ["kya", "キャ"], ["kyu", "キュ"], ["kyo", "キョ"],
+    ["gya", "ギャ"], ["gyu", "ギュ"], ["gyo", "ギョ"],
+    ["sha", "シャ"], ["shu", "シュ"], ["sho", "ショ"], ["she", "シェ"],
+    ["sya", "シャ"], ["syu", "シュ"], ["syo", "ショ"],
+    ["cha", "チャ"], ["chu", "チュ"], ["cho", "チョ"], ["che", "チェ"], ["chi", "チ"],
+    ["tya", "チャ"], ["tyu", "チュ"], ["tyo", "チョ"], ["thi", "ティ"],
+    ["cya", "チャ"], ["cyu", "チュ"], ["cyo", "チョ"],
+    ["nya", "ニャ"], ["nyu", "ニュ"], ["nyo", "ニョ"],
+    ["hya", "ヒャ"], ["hyu", "ヒュ"], ["hyo", "ヒョ"],
+    ["mya", "ミャ"], ["myu", "ミュ"], ["myo", "ミョ"],
+    ["rya", "リャ"], ["ryu", "リュ"], ["ryo", "リョ"],
+    ["jya", "ジャ"], ["jyu", "ジュ"], ["jyo", "ジョ"],
+    ["ja", "ジャ"], ["ju", "ジュ"], ["jo", "ジョ"], ["je", "ジェ"],
+    ["bya", "ビャ"], ["byu", "ビュ"], ["byo", "ビョ"],
+    ["pya", "ピャ"], ["pyu", "ピュ"], ["pyo", "ピョ"],
+    ["dya", "ヂャ"], ["dyu", "ヂュ"], ["dyo", "ヂョ"],
+    ["dhi", "ディ"], ["dhu", "ドゥ"],
+    ["tsu", "ツ"], ["tsa", "ツァ"], ["tsi", "ツィ"], ["tse", "ツェ"], ["tso", "ツォ"],
+    ["xtu", "ッ"], ["xtsu", "ッ"], ["ltu", "ッ"], ["ltsu", "ッ"],
+    ["xya", "ャ"], ["xyu", "ュ"], ["xyo", "ョ"],
+    ["lya", "ャ"], ["lyu", "ュ"], ["lyo", "ョ"],
+    ["kwa", "クァ"], ["kwi", "クィ"], ["kwe", "クェ"], ["kwo", "クォ"],
+    ["gwa", "グァ"],
+    ["shi", "シ"],
+    ["fu", "フ"],
+    ["va", "ヴァ"], ["vi", "ヴィ"], ["vu", "ヴ"], ["ve", "ヴェ"], ["vo", "ヴォ"],
+    ["fa", "ファ"], ["fi", "フィ"], ["fe", "フェ"], ["fo", "フォ"],
+    ["wha", "ウァ"], ["whe", "ウェ"], ["who", "ウォ"],
+    ["ka", "カ"], ["ki", "キ"], ["ku", "ク"], ["ke", "ケ"], ["ko", "コ"],
+    ["sa", "サ"], ["si", "シ"], ["su", "ス"], ["se", "セ"], ["so", "ソ"],
+    ["ta", "タ"], ["ti", "チ"], ["tu", "ツ"], ["te", "テ"], ["to", "ト"],
+    ["na", "ナ"], ["ni", "ニ"], ["nu", "ヌ"], ["ne", "ネ"], ["no", "ノ"],
+    ["ha", "ハ"], ["hi", "ヒ"], ["hu", "フ"], ["he", "ヘ"], ["ho", "ホ"],
+    ["ma", "マ"], ["mi", "ミ"], ["mu", "ム"], ["me", "メ"], ["mo", "モ"],
+    ["ya", "ヤ"], ["yu", "ユ"], ["yo", "ヨ"],
+    ["ra", "ラ"], ["ri", "リ"], ["ru", "ル"], ["re", "レ"], ["ro", "ロ"],
+    ["wa", "ワ"], ["wi", "ウィ"], ["we", "ウェ"], ["wo", "ヲ"],
+    ["ga", "ガ"], ["gi", "ギ"], ["gu", "グ"], ["ge", "ゲ"], ["go", "ゴ"],
+    ["za", "ザ"], ["zi", "ジ"], ["zu", "ズ"], ["ze", "ゼ"], ["zo", "ゾ"],
+    ["da", "ダ"], ["di", "ヂ"], ["du", "ヅ"], ["de", "デ"], ["do", "ド"],
+    ["ba", "バ"], ["bi", "ビ"], ["bu", "ブ"], ["be", "ベ"], ["bo", "ボ"],
+    ["pa", "パ"], ["pi", "ピ"], ["pu", "プ"], ["pe", "ペ"], ["po", "ポ"],
+    ["ji", "ジ"],
+    ["ye", "イェ"],
+    ["xa", "ァ"], ["xi", "ィ"], ["xu", "ゥ"], ["xe", "ェ"], ["xo", "ォ"],
+    ["la", "ァ"], ["li", "ィ"], ["lu", "ゥ"], ["le", "ェ"], ["lo", "ォ"],
+    ["a", "ア"], ["i", "イ"], ["u", "ウ"], ["e", "エ"], ["o", "オ"],
+  ].sort((a, b) => b[0].length - a[0].length);
+
+  function romajiToKatakana(input) {
+    const s = String(input || "").toLowerCase();
+    let out = "";
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === "-" || ch === "ー") {
+        out += "ー";
+        i++;
+        continue;
+      }
+      if (ch === "'" || ch === "’") {
+        i++;
+        continue;
+      }
+      if (ch < "a" || ch > "z") {
+        out += ch;
+        i++;
+        continue;
+      }
+
+      const next = s[i + 1] || "";
+
+      // ヘボン式: n の代わりに m + b/p/m
+      if (ch === "m" && (next === "b" || next === "p" || (next === "m" && s[i + 2] && "aiueo".indexOf(s[i + 2]) < 0))) {
+        out += "ン";
+        i++;
+        continue;
+      }
+
+      // 促音（っか など）。n は撥音なので除外
+      if (next && ch === next && ch !== "n" && "bcdfghjklmpqrstvwxyz".indexOf(ch) >= 0) {
+        out += "ッ";
+        i++;
+        continue;
+      }
+
+      // ん: n' / 語末 / 子音の前（nya は除外）
+      if (ch === "n") {
+        if (!next) {
+          out += "ン";
+          i++;
+          continue;
+        }
+        if (next === "'" || next === "’") {
+          out += "ン";
+          i += 2;
+          continue;
+        }
+        if (next === "n") {
+          out += "ン";
+          i++;
+          continue;
+        }
+        if ("aiueoy".indexOf(next) < 0) {
+          out += "ン";
+          i++;
+          continue;
+        }
+      }
+
+      let matched = false;
+      for (let p = 0; p < ROMAJI_TO_KANA.length; p++) {
+        const roma = ROMAJI_TO_KANA[p][0];
+        if (s.substr(i, roma.length) === roma) {
+          out += ROMAJI_TO_KANA[p][1];
+          i += roma.length;
+          matched = true;
+          break;
+        }
+      }
+      // 音にならない余り（pikach の ch など）は捨てて打ち切り
+      if (!matched) break;
+    }
+    return out;
+  }
+
   function searchPokemon(query) {
-    const q = toKatakana((query || "").trim().toLowerCase());
-    if (!q) return pokemonList.slice(0, 100);
-    return pokemonList.filter((p) => toKatakana(p.name.toLowerCase()).includes(q)).slice(0, 100);
+    const raw = (query || "").trim();
+    if (!raw) return pokemonList.slice(0, 100);
+    const qKana = toKatakana(raw.toLowerCase());
+    const qRoma = romajiToKatakana(raw);
+    return pokemonList.filter((p) => {
+      const name = toKatakana(p.name.toLowerCase());
+      if (qKana && name.includes(qKana)) return true;
+      if (qRoma && qRoma !== qKana && name.includes(qRoma)) return true;
+      return false;
+    }).slice(0, 100);
   }
 
   function getMovesForPokemon(dexNo) {
     const key = String(dexNo);
     const fast = pokeMovelist.filter((r) => r.kind === 0 && r.dexNo === key);
     const charge = pokeMovelist.filter((r) => r.kind === 1 && r.dexNo === key);
+    const third = pokeMovelist.filter((r) => r.kind === 2 && r.dexNo === key);
     return {
       fast: (fast[0] && fast[0].moves) || [],
       charge: (charge[0] && charge[0].moves) || [],
+      third: (third[0] && third[0].moves) || [],
     };
   }
 
+  function getRegisteredThird(dexNo) {
+    const third = getMovesForPokemon(dexNo).third || [];
+    return third[0] || "";
+  }
+
+  function isMegaPokemon(pokemon) {
+    if (!pokemon) return false;
+    if (pokemon.megaTag) return true;
+    const name = String(pokemon.name || "");
+    const dex = String(pokemon.dexNo || "");
+    return name.startsWith("メガ") && dex.indexOf("-") >= 0;
+  }
+
   /**
-   * 全わざリストから検索（kind: 0=通常技, 1=ゲージ技）
+   * 全わざリストから検索（kind: 0=通常技, 1=ゲージ技, 2=サードアタック）
    * ポケモン検索と同様、ひらがな入力でもカタカナ技名にヒットする。
    */
   function searchMoves(query, kind) {
-    const k = kind === 1 ? 1 : 0;
+    const k = kind === 1 ? 1 : kind === 2 ? 2 : 0;
     const pool = moveList.filter((m) => m.kind === k);
     const q = toKatakana((query || "").trim().toLowerCase());
     if (!q) return pool.slice(0, 100);
@@ -214,7 +365,7 @@ const DataService = (function () {
       if (!c1) c1 = chargeWithPriority[0] ? chargeWithPriority[0].name : chargeMoves[0];
       if (!c2) c2 = chargeWithPriority[1] ? chargeWithPriority[1].name : chargeMoves[chargeWithPriority.length > 1 ? 1 : 0];
     }
-    return { fast: fast || "", charge1: c1 || "", charge2: c2 || "" };
+    return { fast: fast || "", charge1: c1 || "", charge2: c2 || "", third: getRegisteredThird(dexNo) };
   }
 
   function getTypeIconPath(typeName) {
@@ -285,7 +436,7 @@ const DataService = (function () {
     if (!jp) return "";
     if (dexNo) {
       const moves = getMovesForPokemon(dexNo);
-      const all = (moves.fast || []).concat(moves.charge || []);
+      const all = (moves.fast || []).concat(moves.charge || []).concat(moves.third || []);
       // 「めざめるパワー〇〇」のように同一英語名で複数ある場合は当該ポケモンが覚えるものを優先
       if (jp === "めざめるパワー") {
         const owned = all.find((m) => /^めざめるパワー/.test(m));
@@ -309,7 +460,14 @@ const DataService = (function () {
     const m = moveName.match(/^めざめるパワー(.+)$/);
     if (m) return m[1];
     const info = getMoveInfo(moveName);
-    return info ? info.type : null;
+    if (info) return info.type;
+    // サードアタック「技+」は元技のタイプを使う
+    if (/\+$/.test(moveName)) {
+      const base = moveName.replace(/\++$/, "");
+      const baseInfo = getMoveInfo(base);
+      if (baseInfo) return baseInfo.type;
+    }
+    return null;
   }
 
   return {
@@ -319,6 +477,8 @@ const DataService = (function () {
     getPokemonByName,
     searchPokemon,
     getMovesForPokemon,
+    getRegisteredThird,
+    isMegaPokemon,
     searchMoves,
     getMoveInfo,
     getDefaultMoves,

@@ -37,6 +37,21 @@ const SheetRender = (function () {
       { charge2Type: px(-718, 75), scale: 2.75 },
       { charge2Name: px(-665, 75), size: 47, align: "left", baseline: "middle" },
     ],
+    pokemonMega: [
+      { mega: px(-521, -200) },
+      { name: px(-520, -670), size: 60, align: "center", baseline: "middle" },
+      { img: px(-522, -414), scale: 6.5 },
+      { cp: px(-298, -220), size: 50, align: "right", baseline: "middle" },
+      { shadowLight: px(-660, -312), scale: 2.75 },
+      { fastType: px(-722, -145), scale: 2.5 },
+      { fastName: px(-682, -145), size: 47, align: "left", baseline: "middle" },
+      { charge1Type: px(-722, -65), scale: 2.5 },
+      { charge1Name: px(-682, -65), size: 47, align: "left", baseline: "middle" },
+      { charge2Type: px(-722, 5), scale: 2.5 },
+      { charge2Name: px(-682, 5), size: 47, align: "left", baseline: "middle" },
+      { thirdType: px(-722, 75), scale: 2.5 },
+      { thirdName: px(-682, 75), size: 47, align: "left", baseline: "middle" },
+    ],
     offsets: [
       { dx: 0, dy: 0 },
       { dx: 520, dy: 0 },
@@ -79,8 +94,8 @@ const SheetRender = (function () {
     // Canvas でカスタムフォントを確実に使うため、描画前に明示的にロード
     try { await document.fonts.load('100px "RyakjiToge"'); } catch (_) {}
 
-    // 進捗管理: テンプレート1 + ポケモン6体×5項目(画像・シャドウ・技タイプ×3) = 31ワーク
-    const TOTAL_WORK = 1 + 6 * 5;
+    // 進捗管理: テンプレート1 + ポケモン6体×7項目
+    const TOTAL_WORK = 1 + 6 * 7;
     let doneWork = 0;
     const tick = () => {
       doneWork++;
@@ -117,6 +132,10 @@ const SheetRender = (function () {
       const off = layout.offsets[i];
       const add = (pos) => ({ x: pos.x + off.dx, y: pos.y + off.dy });
 
+      const pmInfo = (pokemon.dexNo && DataService) ? DataService.getPokemonByDexNo(pokemon.dexNo) : null;
+      const isMega = !!(pmInfo && DataService.isMegaPokemon(pmInfo));
+      const sl = isMega ? layout.pokemonMega : layout.pokemon;
+
       // プレビュー・出力では括弧とその中身を除いた短縮名を表示（例: サンドパン(アローラのすがた) → サンドパン）
       const engOutput = !!(state.engOutput);
       const jpName = (pokemon.name || "").replace(/[([（【].*?[)\]）】]/g, "").trim();
@@ -130,95 +149,120 @@ const SheetRender = (function () {
       const fast = pokemon.fast || "";
       const charge1 = pokemon.charge1 || "";
       const charge2 = pokemon.charge2 || "";
+      const third = pokemon.third || "";
 
+      // メガマークはスロット内の最背面
+      if (isMega) {
+        try {
+          const megaImg = await loadImage(shadowLightFolder + "/mega_trans.png");
+          const p0 = add(sl[0].mega);
+          const mw = megaImg.naturalWidth;
+          const mh = megaImg.naturalHeight;
+          ctx.drawImage(megaImg, p0.x - mw / 2, p0.y - mh / 2, mw, mh);
+        } catch (_) {}
+      }
+      tick();
+
+      const nameSpec = isMega ? sl[1] : sl[0];
       const pkNameSize = engOutput
         ? ((typeof CONFIG !== "undefined" && CONFIG.outputEngPokemonNameSize) || 57)
-        : l.pokemon[0].size;
-      drawText(ctx, name, add(l.pokemon[0].name).x, add(l.pokemon[0].name).y, pkNameSize, l.pokemon[0].align, l.pokemon[0].baseline);
+        : nameSpec.size;
+      drawText(ctx, name, add(nameSpec.name).x, add(nameSpec.name).y, pkNameSize, nameSpec.align, nameSpec.baseline);
 
       // ① ポケモン画像
+      const imgSpec = isMega ? sl[2] : sl[1];
       const recognitionAttempted = !!(state.recognitionAttempted);
       if (dexNo && DataService) {
         const p = DataService.getPokemonByDexNo(dexNo);
         const picPath = (p && p.picPath) || "Image/Pic/" + dexNo + ".png";
         try {
           const img = await loadImage(picPath);
-          const p0 = add(l.pokemon[1].img);
+          const p0 = add(imgSpec.img);
           ctx.drawImage(img, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
         } catch (_) {
           try {
             const q = await loadImage("Image/Pic/Question_Mark.png");
-            const p0 = add(l.pokemon[1].img);
+            const p0 = add(imgSpec.img);
             ctx.drawImage(q, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
           } catch (_) {}
         }
       } else if (recognitionAttempted) {
         try {
           const q = await loadImage("Image/Pic/Question_Mark.png");
-          const p0 = add(l.pokemon[1].img);
+          const p0 = add(imgSpec.img);
           ctx.drawImage(q, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
         } catch (_) {}
       }
       tick(); // ①完了
 
-      if (cp) drawText(ctx, "CP " + cp, add(l.pokemon[2].cp).x, add(l.pokemon[2].cp).y, l.pokemon[2].size, l.pokemon[2].align, l.pokemon[2].baseline);
+      const cpSpec = isMega ? sl[3] : sl[2];
+      if (cp) drawText(ctx, "CP " + cp, add(cpSpec.cp).x, add(cpSpec.cp).y, cpSpec.size, cpSpec.align, cpSpec.baseline);
 
-      // ② シャドウ/ライトアイコン
+      // ② シャドウ/ライトアイコン（メガでも位置は不変 = 通常レイアウトの座標）
+      const slSpec = layout.pokemon[3];
       if (isShadow || isLight) {
         const iconName = isShadow ? "shadow.png" : "light.png";
         try {
           const slImg = await loadImage(shadowLightFolder + "/" + iconName);
-          const slSize = 64 * l.pokemon[3].scale;
-          const p0 = add(l.pokemon[3].shadowLight);
+          const slSize = 64 * slSpec.scale;
+          const p0 = add(slSpec.shadowLight);
           ctx.drawImage(slImg, p0.x - slSize / 2, p0.y - slSize / 2, slSize, slSize);
         } catch (_) {}
       }
       tick(); // ②完了
 
-      // ③④⑤ 技タイプアイコン（常に tick することで合計を保証）
+      // ③④⑤⑥ 技タイプアイコン（常に tick することで合計を保証）
       const getMoveType = (m) => DataService ? DataService.getMoveTypeName(m) : null;
       const dispName = (m) => {
         if (!DataService) return m;
         if (engOutput) return DataService.getMoveEngName(m);
         return DataService.getDisplayMoveName(m);
       };
+      const nameFast = isMega ? sl[6] : sl[5];
       const moveNameSize = engOutput
         ? ((typeof CONFIG !== "undefined" && CONFIG.outputEngMoveNameSize) || 40)
-        : l.pokemon[5].size;
+        : nameFast.size;
 
-      const drawTypeIcon = async (typeName, posObj) => {
+      const drawTypeIcon = async (typeName, posObj, scale) => {
         if (!typeName || !DataService) return;
         const path = DataService.getTypeIconPath(typeName);
         if (!path) return;
         try {
           const ti = await loadImage(path);
-          // 画像の実サイズ × 275% で描画（24px画像なら66px、64px画像なら176px）
-          const ts = ti.naturalWidth * layout.pokemon[4].scale;
+          const ts = ti.naturalWidth * scale;
           const p0 = add(posObj);
           ctx.drawImage(ti, p0.x - ts / 2, p0.y - ts / 2, ts, ts);
         } catch (_) {}
       };
 
-      const fastType = getMoveType(fast);
-      if (fast) {
-        if (fastType) await drawTypeIcon(fastType, l.pokemon[4].fastType);
-        drawText(ctx, dispName(fast), add(l.pokemon[5].fastName).x, add(l.pokemon[5].fastName).y, moveNameSize, l.pokemon[5].align, l.pokemon[5].baseline);
-      }
-      tick(); // ③完了
+      const posOf = (entry) => entry.fastType || entry.charge1Type || entry.charge2Type || entry.thirdType
+        || entry.fastName || entry.charge1Name || entry.charge2Name || entry.thirdName;
 
-      const charge1Type = getMoveType(charge1);
-      if (charge1) {
-        if (charge1Type) await drawTypeIcon(charge1Type, l.pokemon[6].charge1Type);
-        drawText(ctx, dispName(charge1), add(l.pokemon[7].charge1Name).x, add(l.pokemon[7].charge1Name).y, moveNameSize, l.pokemon[7].align, l.pokemon[7].baseline);
-      }
-      tick(); // ④完了
+      const drawMove = async (moveName, typeEntry, nameEntry) => {
+        if (!moveName) return;
+        const typeName = getMoveType(moveName);
+        if (typeName) await drawTypeIcon(typeName, posOf(typeEntry), typeEntry.scale);
+        drawText(ctx, dispName(moveName), add(posOf(nameEntry)).x, add(posOf(nameEntry)).y, moveNameSize, nameEntry.align, nameEntry.baseline);
+      };
 
-      const charge2Type = getMoveType(charge2);
-      if (charge2) {
-        if (charge2Type) await drawTypeIcon(charge2Type, l.pokemon[8].charge2Type);
-        drawText(ctx, dispName(charge2), add(l.pokemon[9].charge2Name).x, add(l.pokemon[9].charge2Name).y, moveNameSize, l.pokemon[9].align, l.pokemon[9].baseline);
+      if (isMega) {
+        await drawMove(fast, sl[5], sl[6]);
+        tick();
+        await drawMove(charge1, sl[7], sl[8]);
+        tick();
+        await drawMove(charge2, sl[9], sl[10]);
+        tick();
+        await drawMove(third, sl[11], sl[12]);
+        tick();
+      } else {
+        await drawMove(fast, sl[4], sl[5]);
+        tick();
+        await drawMove(charge1, sl[6], sl[7]);
+        tick();
+        await drawMove(charge2, sl[8], sl[9]);
+        tick();
+        tick(); // 非メガはサードなし（進捗枠は確保）
       }
-      tick(); // ⑤完了
     }
 
     ctx.restore();

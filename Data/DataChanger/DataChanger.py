@@ -97,7 +97,7 @@ def load_pokemon_moves():
 
         if flag == "0":
             move_map[dex]["fast"] = moves
-        else:
+        elif flag == "1":
             move_map[dex]["charge"] = moves
 
     return move_map
