@@ -330,16 +330,48 @@ const DataService = (function () {
     }).slice(0, 100);
   }
 
+  const CHARGE_PLUS_KEEP_AS_SPECIAL = ["せいなるほのお", "エアロブラスト"];
+
+  function normalizePlusName(name) {
+    return String(name || "").replace(/＋/g, "+").trim();
+  }
+
+  function isThirdAttackName(name) {
+    const n = normalizePlusName(name);
+    if (!/\+$/.test(n)) return false;
+    return !CHARGE_PLUS_KEEP_AS_SPECIAL.some((prefix) => n.startsWith(prefix));
+  }
+
   function getMovesForPokemon(dexNo) {
     const key = String(dexNo);
     const fast = pokeMovelist.filter((r) => r.kind === 0 && r.dexNo === key);
     const charge = pokeMovelist.filter((r) => r.kind === 1 && r.dexNo === key);
     const third = pokeMovelist.filter((r) => r.kind === 2 && r.dexNo === key);
+    const pm = getPokemonByDexNo(key);
+    const mega = isMegaPokemon(pm);
+    const chargeMoves = ((charge[0] && charge[0].moves) || []).filter((m) => !isThirdAttackName(m));
+    const thirdMoves = mega
+      ? listUnique([
+          ...((third[0] && third[0].moves) || []),
+          ...((charge[0] && charge[0].moves) || []),
+        ].filter(isThirdAttackName))
+      : [];
     return {
       fast: (fast[0] && fast[0].moves) || [],
-      charge: (charge[0] && charge[0].moves) || [],
-      third: (third[0] && third[0].moves) || [],
+      charge: chargeMoves,
+      third: thirdMoves,
     };
+  }
+
+  function listUnique(arr) {
+    const seen = {};
+    const out = [];
+    (arr || []).forEach((x) => {
+      if (!x || seen[x]) return;
+      seen[x] = true;
+      out.push(x);
+    });
+    return out;
   }
 
   function getRegisteredThird(dexNo) {
@@ -361,7 +393,9 @@ const DataService = (function () {
    */
   function searchMoves(query, kind) {
     const k = kind === 1 ? 1 : kind === 2 ? 2 : 0;
-    const pool = moveList.filter((m) => m.kind === k);
+    let pool = moveList.filter((m) => m.kind === k);
+    if (k === 1) pool = pool.filter((m) => !isThirdAttackName(m.name));
+    if (k === 2) pool = pool.filter((m) => isThirdAttackName(m.name));
     const q = toKatakana((query || "").trim().toLowerCase());
     if (!q) return pool.slice(0, 100);
     return pool.filter((m) => toKatakana(String(m.name || "").toLowerCase()).includes(q)).slice(0, 100);
@@ -379,8 +413,8 @@ const DataService = (function () {
     const { fast: fastMoves, charge: chargeMoves } = getMovesForPokemon(dexNo);
 
     let fast = customFast;
-    let c1 = customCharge1;
-    let c2 = customCharge2;
+    let c1 = isThirdAttackName(customCharge1) ? "" : customCharge1;
+    let c2 = isThirdAttackName(customCharge2) ? "" : customCharge2;
 
     if (!fast && fastMoves.length) {
       const fastWithPriority = fastMoves
@@ -512,6 +546,7 @@ const DataService = (function () {
     getMovesForPokemon,
     getRegisteredThird,
     isMegaPokemon,
+    isThirdAttackName,
     searchMoves,
     getMoveInfo,
     getDefaultMoves,

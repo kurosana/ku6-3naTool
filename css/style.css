@@ -1675,11 +1675,10 @@ a.btn-role {
   margin: .75rem 0 1rem;
   text-align: center;
 }
-.btn-scan-entry {
-  width: 100%;
-  padding: .85rem 1rem;
-  font-size: .95rem;
-  border-radius: var(--radius-sm);
+.sheet-scan-row .btn-load-image {
+  display: inline-block;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
 }
 
 /* ========== 画像認識ページ ========== */

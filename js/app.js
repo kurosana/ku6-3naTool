@@ -228,6 +228,10 @@
         ? (picSrc ? `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${picSrc}" alt="" data-slot="${i}" data-field="img" onerror="this.style.display='none'">` : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`)
         : `<img class="slot-pokemon-img slot-pokemon-img--clickable" src="${basePath}Image/Pic/Question_Mark.png" alt="" data-slot="${i}" data-field="img">`;
       const moves = DataService && p.dexNo ? DataService.getMovesForPokemon(p.dexNo) : { fast: [], charge: [], third: [] };
+      if (DataService) {
+        if (DataService.isThirdAttackName(p.charge1)) p.charge1 = "";
+        if (DataService.isThirdAttackName(p.charge2)) p.charge2 = "";
+      }
       const showAllMovesOpt = !!(moveBug && p.dexNo);
       const fastOpts = buildMoveSelectOptions(moves.fast, p.fast, showAllMovesOpt);
       const charge1Opts = buildMoveSelectOptions(moves.charge, p.charge1, showAllMovesOpt);
@@ -506,8 +510,8 @@
           const c2Jp = DataService ? DataService.parseJsonMoveName(pickToken(src.chargedMoves2), pm.dexNo) : "";
           const t3Jp = DataService ? DataService.parseJsonMoveName(pickToken(src.thirdMoves), pm.dexNo) : "";
           slot.fast = fastJp || def.fast || "";
-          slot.charge1 = c1Jp || def.charge1 || "";
-          slot.charge2 = c2Jp || def.charge2 || "";
+          slot.charge1 = DataService.isThirdAttackName(c1Jp) ? (def.charge1 || "") : (c1Jp || def.charge1 || "");
+          slot.charge2 = DataService.isThirdAttackName(c2Jp) ? (def.charge2 || "") : (c2Jp || def.charge2 || "");
           slot.third = t3Jp || def.third || "";
         }
       }
@@ -540,8 +544,10 @@
           const pickToken = (v) => (Array.isArray(v) ? v[0] || "" : typeof v === "string" ? v : "");
           const def = DataService.getDefaultMoves(pm);
           slot.fast = DataService.parseJsonMoveName(pickToken(src.fastMoves), pm.dexNo) || def.fast || "";
-          slot.charge1 = DataService.parseJsonMoveName(pickToken(src.chargedMoves1), pm.dexNo) || def.charge1 || "";
-          slot.charge2 = DataService.parseJsonMoveName(pickToken(src.chargedMoves2), pm.dexNo) || def.charge2 || "";
+          const c1Jp = DataService.parseJsonMoveName(pickToken(src.chargedMoves1), pm.dexNo);
+          const c2Jp = DataService.parseJsonMoveName(pickToken(src.chargedMoves2), pm.dexNo);
+          slot.charge1 = DataService.isThirdAttackName(c1Jp) ? (def.charge1 || "") : (c1Jp || def.charge1 || "");
+          slot.charge2 = DataService.isThirdAttackName(c2Jp) ? (def.charge2 || "") : (c2Jp || def.charge2 || "");
           slot.third = DataService.parseJsonMoveName(pickToken(src.thirdMoves), pm.dexNo) || def.third || "";
         }
       }
