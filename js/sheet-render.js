@@ -40,7 +40,7 @@ const SheetRender = (function () {
     pokemonMega: [
       { mega: px(-521, -200) },
       { name: px(-520, -670), size: 60, align: "center", baseline: "middle" },
-      { img: px(-522, -414), scale: 6.5 },
+      { img: px(-522, -444), scale: 6 },
       { cp: px(-298, -220), size: 50, align: "right", baseline: "middle" },
       { shadowLight: px(-660, -312), scale: 2.75 },
       { fastType: px(-722, -145), scale: 2.5 },
@@ -125,7 +125,6 @@ const SheetRender = (function () {
     if (friendCode) drawText(ctx, friendCode, l.friendCode.pos.x, l.friendCode.pos.y, l.friendCode.size, l.friendCode.align, l.friendCode.baseline);
 
     const shadowLightFolder = (typeof CONFIG !== "undefined" && CONFIG.shadowLightIconFolder) ? CONFIG.shadowLightIconFolder : "Image/Type&shadow";
-    const iconSize = 64 * layout.pokemon[1].scale;
 
     for (let i = 0; i < 6; i++) {
       const pokemon = (state.pokemons && state.pokemons[i]) || {};
@@ -171,6 +170,7 @@ const SheetRender = (function () {
 
       // ① ポケモン画像
       const imgSpec = isMega ? sl[2] : sl[1];
+      const pkIconSize = 64 * (imgSpec.scale || 6.5);
       const recognitionAttempted = !!(state.recognitionAttempted);
       if (dexNo && DataService) {
         const p = DataService.getPokemonByDexNo(dexNo);
@@ -178,19 +178,19 @@ const SheetRender = (function () {
         try {
           const img = await loadImage(picPath);
           const p0 = add(imgSpec.img);
-          ctx.drawImage(img, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
+          ctx.drawImage(img, p0.x - pkIconSize / 2, p0.y - pkIconSize / 2, pkIconSize, pkIconSize);
         } catch (_) {
           try {
             const q = await loadImage("Image/Pic/Question_Mark.png");
             const p0 = add(imgSpec.img);
-            ctx.drawImage(q, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
+            ctx.drawImage(q, p0.x - pkIconSize / 2, p0.y - pkIconSize / 2, pkIconSize, pkIconSize);
           } catch (_) {}
         }
       } else if (recognitionAttempted) {
         try {
           const q = await loadImage("Image/Pic/Question_Mark.png");
           const p0 = add(imgSpec.img);
-          ctx.drawImage(q, p0.x - iconSize / 2, p0.y - iconSize / 2, iconSize, iconSize);
+          ctx.drawImage(q, p0.x - pkIconSize / 2, p0.y - pkIconSize / 2, pkIconSize, pkIconSize);
         } catch (_) {}
       }
       tick(); // ①完了

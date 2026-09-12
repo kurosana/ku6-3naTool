@@ -1319,6 +1319,12 @@ a.btn-role {
   text-align: center;
 }
 
+@media (max-width: 600px) {
+  .top-scroll {
+    padding-top: 10dvh;
+  }
+}
+
 .top-hero-logo {
   width: min(92vw, 420px);
   height: auto;
