@@ -880,16 +880,27 @@
     const grid = $("slot-picker-grid");
     const slots = StorageService.getPartySlots();
     grid.innerHTML = slots.map((s, i) => {
-      const label = s ? (s.name || "スロット" + (i + 1)) : "空きスロット " + (i + 1);
-      return `<button type="button" class="slot-picker-btn${s ? " has-data" : ""}" data-slot-index="${i}">${escapeHtml(label)}</button>`;
+      const name = s ? (s.name || "パーティ" + (i + 1)) : "空きスロット";
+      const date = s ? new Date(s.at).toLocaleString("ja-JP") : "";
+      const pics = s ? renderSlotPokemonRow(s.json) : Array(6).fill('<span class="slot-empty"></span>').join("");
+      const emptyClass = s ? "" : " data-slot-empty";
+      return `
+        <button type="button" class="data-slot-card data-slot-card--pick${emptyClass}" data-slot-index="${i}">
+          <div class="data-slot-body">
+            <div class="data-slot-header">
+              <span class="data-slot-name">${escapeHtml(name)}</span>
+              <span class="data-slot-date">${escapeHtml(date)}</span>
+            </div>
+            <div class="data-slot-pokemon">${pics}</div>
+          </div>
+        </button>`;
     }).join("");
-    grid.querySelectorAll(".slot-picker-btn").forEach((btn) => {
+    grid.querySelectorAll("[data-slot-index]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-slot-index"), 10);
-        const slots = StorageService.getPartySlots();
-        if (slots[idx]) {
+        const current = StorageService.getPartySlots();
+        if (current[idx]) {
           pendingSlotSaveIndex = idx;
-          closeSlotPicker();
           openSlotConfirm();
         } else {
           doSaveToSlot(idx);

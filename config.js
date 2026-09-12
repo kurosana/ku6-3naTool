@@ -5,11 +5,18 @@
 const CONFIG = {
   debugRecognition: 0,
 
-  appVersion: "v3.0.5",
+  appVersion: "v3.0.6",
   appReleaseNotes: "UI全面改修・保存スロット10件・対戦ログ・メガ風デザイン",
 
   // ユーザー向け変更履歴（新しいバージョンは先頭に追記）
   appChangelog: [
+    {
+      version: "v3.0.6",
+      changes: [
+        "「データスロットに保存」で、保存データと同じようにスロットの中身を見ながら選べるようにしました。",
+        "パーティシートの「画像認識で入力」ボタンを目立つようにしました。",
+      ],
+    },
     {
       version: "v3.0.5",
       changes: [

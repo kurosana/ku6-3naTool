@@ -2028,26 +2028,46 @@ a.btn-role {
 }
 .dialog-cancel { display: block; margin: .75rem auto 0; }
 
-.slot-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: .5rem;
-  margin-bottom: .5rem;
+.dialog-box--slot-picker {
+  max-width: min(92vw, 520px);
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1rem 1.1rem;
 }
-.slot-picker-btn {
-  padding: .75rem .5rem;
-  font-size: .85rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--btn-secondary-hover);
+.dialog-box--slot-picker .dialog-title {
+  flex-shrink: 0;
+}
+.slot-picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  margin: 0 0 .25rem;
+  padding: 0 .05rem .35rem;
+}
+.dialog-box--slot-picker .dialog-cancel {
+  flex-shrink: 0;
+  margin: .5rem auto 0;
+}
+.data-slot-card--pick {
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
-  text-align: center;
 }
-.slot-picker-btn.has-data {
-  border-color: var(--btn-primary);
-  background: rgba(45, 212, 191, .15);
+.data-slot-card--pick .data-slot-body {
+  cursor: pointer;
 }
-.slot-picker-btn:active { transform: scale(.98); }
+.data-slot-empty.data-slot-card--pick .data-slot-body {
+  cursor: pointer;
+}
 
 /* ========== 呼出メニュー ========== */
 .overlay-recall {
