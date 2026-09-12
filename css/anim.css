@@ -77,6 +77,12 @@
   animation: top-fade-up 1.1s var(--e-settle) .5s both;
 }
 
+.top-guide .section-title,
+#guide-sections .guide-phase:first-child {
+  opacity: 0;
+  animation: top-fade-up 1.1s var(--e-settle) .5s both;
+}
+
 .top-scroll-cue {
   animation: top-scroll-bounce 1.6s ease-in-out infinite;
 }
@@ -113,7 +119,9 @@ html.js-anim [data-reveal].is-inview {
 body.top-anim-done .top-hero-logo,
 body.top-anim-done .top-hero-favicon,
 body.top-anim-done .top-hero-cta,
-body.top-anim-done .top-hero-invite {
+body.top-anim-done .top-hero-invite,
+body.top-anim-done .top-guide .section-title,
+body.top-anim-done #guide-sections .guide-phase:first-child {
   opacity: 1 !important;
 }
 
@@ -122,6 +130,8 @@ body.top-anim-done .top-hero-invite {
   .top-hero-favicon,
   .top-hero-cta,
   .top-hero-invite,
+  .top-guide .section-title,
+  #guide-sections .guide-phase:first-child,
   .top-scroll-cue,
   .top-hero-logo-wrap::after,
   #app.top-impact-shake,
