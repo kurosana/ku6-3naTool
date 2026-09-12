@@ -1341,9 +1341,99 @@ a.btn-role {
 }
 
 .btn-hero-large {
+  position: relative;
+  isolation: isolate;
+  display: inline-block;
   width: min(88vw, 340px);
+  padding: 0;
+  overflow: visible;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  outline-offset: 4px;
+  user-select: none;
+  transition: filter .2s ease;
+}
+.btn-hero-large::before { content: none; }
+.btn-hero-large:hover,
+.btn-hero-large:hover.btn-primary {
+  background: transparent;
+  filter: brightness(1.06);
+}
+.btn-hero-large:active {
+  transform: none;
+}
+.btn-hero-large:focus:not(:focus-visible) {
+  outline: none;
+}
+.btn-hero-large:focus-visible {
+  outline: 3px solid var(--btn-pressed);
+  outline-offset: 4px;
+}
+.btn-hero-shadow,
+.btn-hero-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+.btn-hero-shadow {
+  background: rgba(15, 118, 110, .3);
+  transform: translateY(2px);
+  filter: blur(4px);
+  transition: transform .35s cubic-bezier(.3, .7, .4, 1);
+}
+.btn-hero-edge {
+  background: linear-gradient(90deg, #0f766e 0%, #0d9488 14%, #0d9488 86%, #0f766e 100%);
+}
+.btn-hero-front {
+  position: relative;
+  display: block;
   padding: 1.4rem 2rem;
+  border-radius: var(--radius);
   font-size: clamp(1.25rem, 5vw, 1.6rem);
+  color: #fff;
+  background-color: var(--btn-primary);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .28) 0%, rgba(255, 255, 255, .08) 40%, transparent 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42);
+  transform: translateY(-5px);
+  transition: transform .35s cubic-bezier(.3, .7, .4, 1);
+}
+.btn-hero-large:hover .btn-hero-front {
+  transform: translateY(-7px);
+  transition: transform .2s cubic-bezier(.3, .7, .4, 1.4);
+}
+.btn-hero-large:hover .btn-hero-shadow {
+  transform: translateY(4px);
+  transition: transform .2s cubic-bezier(.3, .7, .4, 1.4);
+}
+.btn-hero-large:active .btn-hero-front {
+  transform: translateY(-2px);
+  transition: transform 40ms linear;
+}
+.btn-hero-large:active .btn-hero-shadow {
+  transform: translateY(1px);
+  transition: transform 40ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-hero-large,
+  .btn-hero-large:hover {
+    filter: none;
+  }
+  .btn-hero-shadow,
+  .btn-hero-front {
+    transition: none;
+  }
+  .btn-hero-front,
+  .btn-hero-large:hover .btn-hero-front,
+  .btn-hero-large:active .btn-hero-front {
+    transform: translateY(-4px);
+  }
+  .btn-hero-shadow,
+  .btn-hero-large:hover .btn-hero-shadow,
+  .btn-hero-large:active .btn-hero-shadow {
+    transform: translateY(2px);
+  }
 }
 
 .top-scroll-cue {
