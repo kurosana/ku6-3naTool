@@ -93,6 +93,9 @@
       <div class="version-main screen-enter">
         <p class="version-current">現在のバージョン <strong id="version-current-num"></strong></p>
         <div id="version-changelog"></div>
+        <div class="version-debug">
+          <button type="button" class="btn-role btn-secondary" id="btn-qr-debug">QRデバッグ</button>
+        </div>
       </div>
     </section>
 
@@ -282,6 +285,19 @@
     </div>
   </div>
 
+  <!-- QRデバッグ -->
+  <div id="overlay-qr-debug" class="overlay overlay-dialog" aria-hidden="true">
+    <div class="dialog-backdrop" id="qr-debug-backdrop"></div>
+    <div class="dialog-box dialog-box--qr-debug">
+      <p class="dialog-title" id="qr-debug-title">保存データを選択</p>
+      <div id="qr-debug-body"></div>
+      <div class="dialog-actions qr-debug-actions">
+        <button type="button" class="btn-role btn-secondary" id="btn-qr-debug-back" hidden>戻る</button>
+        <button type="button" class="btn-role btn-secondary" id="btn-qr-debug-close">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <!-- スロット選択 -->
   <div id="overlay-slot-picker" class="overlay overlay-dialog" aria-hidden="true">
     <div class="dialog-backdrop" id="slot-picker-backdrop"></div>
@@ -403,6 +419,7 @@
   <script src="js/recognition.js"></script>
   <script src="js/sheet-render.js"></script>
   <script src="js/anim.js"></script>
+  <script src="js/qrcode.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

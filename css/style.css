@@ -1603,6 +1603,64 @@ a.btn-role {
   line-height: 1.55;
 }
 .version-block li { margin: 0 0 .2rem; }
+.version-debug {
+  margin-top: 1.75rem;
+  text-align: center;
+}
+.version-debug .btn-role {
+  min-width: 9rem;
+  padding: .55rem 1.25rem;
+}
+.dialog-box--qr-debug {
+  max-width: min(92vw, 520px);
+  max-height: min(88dvh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1rem 1.1rem;
+}
+.dialog-box--qr-debug .dialog-title { flex-shrink: 0; }
+#qr-debug-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.qr-debug-actions { flex-shrink: 0; margin-top: .75rem; }
+.qr-debug-note {
+  margin: 0 0 .75rem;
+  font-size: .75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.qr-debug-image-wrap {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .6rem;
+  display: flex;
+  justify-content: center;
+}
+.qr-debug-image-wrap img {
+  width: min(100%, 280px);
+  height: auto;
+  image-rendering: pixelated;
+}
+.qr-debug-meta {
+  margin: .65rem 0 .4rem;
+  font-size: .78rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+.qr-debug-payload {
+  margin: 0;
+  max-height: 7rem;
+  overflow: auto;
+  font-size: .68rem;
+  line-height: 1.45;
+  word-break: break-all;
+  background: rgba(0,0,0,.04);
+  padding: .5rem .6rem;
+  border-radius: var(--radius-sm);
+}
 
 /* ========== メニュー ========== */
 #screen-menu { position: relative; }

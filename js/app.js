@@ -1203,6 +1203,136 @@
     recallField = null;
   }
 
+  function bytesToBase32(bytes) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = 0;
+    let value = 0;
+    let out = "";
+    for (let i = 0; i < bytes.length; i++) {
+      value = ((value << 8) | bytes[i]) & 0xffff;
+      bits += 8;
+      while (bits >= 5) {
+        bits -= 5;
+        out += alphabet[(value >>> bits) & 31];
+      }
+    }
+    if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+    return out;
+  }
+
+  function partyJsonToPrintText(json) {
+    const first = (v) => (Array.isArray(v) ? (v[0] || "") : "");
+    const body = {
+      n: json && typeof json.trainerName === "string" ? json.trainerName : "",
+      t: json && typeof json.trainerId === "string" ? json.trainerId : "",
+      f: json && json.friendCode != null ? String(json.friendCode) : "",
+      p: Array.isArray(json && json.pokemons) ? json.pokemons.slice(0, 6).map((mon) => {
+        if (!mon || typeof mon !== "object") return null;
+        return [
+          mon.dex == null ? null : mon.dex,
+          mon.CP == null ? null : mon.CP,
+          mon.shadow ? 1 : 0,
+          mon.light ? 1 : 0,
+          first(mon.fastMoves),
+          first(mon.chargedMoves1),
+          first(mon.chargedMoves2),
+          first(mon.thirdMoves),
+        ];
+      }) : [],
+    };
+    return bytesToBase32(new TextEncoder().encode(JSON.stringify(body)));
+  }
+
+  function openQrDebug() {
+    const overlay = $("overlay-qr-debug");
+    if (!overlay) return;
+    renderQrDebugList();
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function closeQrDebug() {
+    const overlay = $("overlay-qr-debug");
+    if (!overlay) return;
+    overlay.classList.remove("active");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+
+  function renderQrDebugList() {
+    const title = $("qr-debug-title");
+    const body = $("qr-debug-body");
+    const back = $("btn-qr-debug-back");
+    if (title) title.textContent = "保存データを選択";
+    if (back) back.hidden = true;
+    if (!body) return;
+    const slots = StorageService.getPartySlots();
+    const filled = slots.map((s, i) => ({ s, i })).filter((x) => x.s && x.s.json);
+    if (!filled.length) {
+      body.innerHTML = '<p class="list-empty">保存データがありません</p>';
+      return;
+    }
+    body.innerHTML = '<div class="slot-picker-list">' + filled.map(({ s, i }) => {
+      const name = s.name || ("パーティ" + (i + 1));
+      const date = s.at ? new Date(s.at).toLocaleString("ja-JP") : "";
+      const pics = renderSlotPokemonRow(s.json);
+      return `
+        <button type="button" class="data-slot-card data-slot-card--pick" data-qr-slot="${i}">
+          <div class="data-slot-body">
+            <div class="data-slot-header">
+              <span class="data-slot-name">${escapeHtml(name)}</span>
+              <span class="data-slot-date">${escapeHtml(date)}</span>
+            </div>
+            <div class="data-slot-pokemon">${pics}</div>
+          </div>
+        </button>`;
+    }).join("") + "</div>";
+    body.querySelectorAll("[data-qr-slot]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        renderQrDebugCode(parseInt(btn.getAttribute("data-qr-slot"), 10));
+      });
+    });
+  }
+
+  function renderQrDebugCode(index) {
+    const title = $("qr-debug-title");
+    const body = $("qr-debug-body");
+    const back = $("btn-qr-debug-back");
+    const slots = StorageService.getPartySlots();
+    const slot = slots[index];
+    if (!slot || !slot.json || !body) {
+      renderQrDebugList();
+      return;
+    }
+    const name = slot.name || ("パーティ" + (index + 1));
+    if (title) title.textContent = name;
+    if (back) back.hidden = false;
+    let payload = "";
+    let qrUrl = "";
+    let version = "";
+    let error = "";
+    try {
+      payload = partyJsonToPrintText(slot.json);
+      if (typeof qrcode !== "function") throw new Error("qrcode missing");
+      const qr = qrcode(0, "M");
+      qr.addData(payload, "Alphanumeric");
+      qr.make();
+      qrUrl = qr.createDataURL(6, 4);
+      version = String((qr.getModuleCount() - 17) / 4);
+    } catch (e) {
+      error = "QRを作れませんでした";
+      console.error("[QRデバッグ]", e);
+    }
+    if (error) {
+      body.innerHTML = `<p class="list-empty">${escapeHtml(error)}</p>`;
+      return;
+    }
+    body.innerHTML = `
+      <p class="qr-debug-note">Macではテキストエディットを前面にして、このQRを読み取ってください。出た文字が下の列と全部一致すれば成功です。</p>
+      <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="保存データのQR"></div>
+      <p class="qr-debug-meta">${payload.length}文字 / バージョン${escapeHtml(version)}</p>
+      <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
+  }
+
   function initGuide() {
     const container = $("guide-sections");
     if (!container || !CONFIG || !CONFIG.guideSections) return;
@@ -1280,6 +1410,10 @@
   function initEventListeners() {
     $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
+    $("btn-qr-debug").addEventListener("click", openQrDebug);
+    $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
+    $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
+    $("btn-qr-debug-back").addEventListener("click", renderQrDebugList);
     $("btn-back-version").addEventListener("click", () => showScreen("top"));
     $("btn-back-top").addEventListener("click", () => showScreen("top"));
     $("btn-new-party").addEventListener("click", openSheetFresh);
