@@ -107,7 +107,7 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: edgePath,
     headless: true,
-    args: ["--no-sandbox", "--disable-gpu"],
+    args: ["--no-sandbox", "--disable-gpu", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
   });
 
   try {
@@ -149,6 +149,7 @@ async function main() {
 
       assert("DOM 主要画面", !!document.getElementById("screen-top") && !!document.getElementById("screen-sheet"));
       assert("DOM QRデバッグ", !!document.getElementById("overlay-qr-debug"));
+      assert("DOM QR読み取りガイド", !!document.getElementById("qr-read-guide") && !!document.getElementById("btn-qr-diag"));
       assert("DOM スロットピッカー用クラスCSS", !!document.querySelector('link[href*="style.css"]'));
 
       // QR codec（app.js から抽出した同一実装）
@@ -246,8 +247,67 @@ async function main() {
         assert("シート canvas 描画", false, String(e));
       }
 
+      const cropHit = await (async () => {
+        const payload = "ABCDEFGH234567";
+        const qr = qrcode(0, "M");
+        qr.addData(payload, "Alphanumeric");
+        qr.make();
+        const img = await new Promise((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = () => reject(new Error("qr image"));
+          el.src = qr.createDataURL(4, 4);
+        });
+        const W = 1920;
+        const H = 1080;
+        const scene = document.createElement("canvas");
+        scene.width = W;
+        scene.height = H;
+        const sctx = scene.getContext("2d");
+        sctx.fillStyle = "#777";
+        sctx.fillRect(0, 0, W, H);
+        const qw = 150;
+        sctx.drawImage(img, (W - qw) / 2, (H - qw) / 2, qw, qw);
+        const scan = (sx, sy, sw, sh, dw, dh) => {
+          const c = document.createElement("canvas");
+          c.width = dw;
+          c.height = dh;
+          const x = c.getContext("2d", { willReadFrequently: true });
+          x.drawImage(scene, sx, sy, sw, sh, 0, 0, dw, dh);
+          const image = x.getImageData(0, 0, dw, dh);
+          const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" });
+          return code && code.data ? code.data : "";
+        };
+        const side = Math.round(Math.min(W, H) * 0.72);
+        const center = scan((W - side) / 2, (H - side) / 2, side, side, Math.min(side, 960), Math.min(side, 960));
+        const scale = 960 / W;
+        const full = scan(0, 0, W, H, Math.round(W * scale), Math.round(H * scale));
+        return { center: center === payload, full: full === payload };
+      })();
+      assert("中央切り出しで小さいQRを読める", cropHit.center, cropHit.full ? "全体縮小でも読めた" : "全体縮小では読めず");
+
       return out;
     }, qrHelperSrc);
+
+    await page.click("#btn-to-version");
+    await page.waitForSelector("#screen-version.active");
+    await page.click("#btn-qr-read");
+    await page.waitForSelector("#screen-qr-read.active");
+    await page.waitForFunction(() => {
+      const t = document.getElementById("qr-read-live") && document.getElementById("qr-read-live").textContent;
+      return t && t !== "カメラを起動しています";
+    }, { timeout: 8000 }).catch(() => {});
+    const cam = await page.evaluate(() => {
+      const live = document.getElementById("qr-read-live");
+      const note = document.querySelector("#qr-read-camera .qr-read-note");
+      return {
+        note: note ? note.textContent : "",
+        live: live ? live.textContent : "",
+        guide: !!document.getElementById("qr-read-guide"),
+      };
+    });
+    push("QR読み取り画面の案内", cam.note.indexOf("白い枠") >= 0, cam.note);
+    push("QR読み取りの状態表示", !!cam.live, cam.live);
 
     browserTests.forEach((t) => push(t.name, t.ok, t.detail));
   } finally {

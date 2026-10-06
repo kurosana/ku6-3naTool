@@ -49,6 +49,14 @@
   let qrReadBusy = false;
   let qrReadDetector = null;
   let qrReadBlobUrl = null;
+  let qrReadFrame = 0;
+  let qrNativeFails = 0;
+  let qrGuideOnResize = null;
+  let qrReadDiag = emptyQrReadDiag();
+
+  const QR_CROP_RATIO = 0.72;
+  const QR_CROP_MAX = 960;
+  const QR_FULL_MAX = 960;
 
   let currentSearchSlotIndex = null;
   let currentSearchContainerId = "pokemon-slots";
@@ -1463,6 +1471,7 @@
   function stopQrReadCamera() {
     qrReadStop = true;
     qrReadBusy = false;
+    unbindQrGuide();
     if (qrReadRaf) cancelAnimationFrame(qrReadRaf);
     qrReadRaf = 0;
     if (qrReadStream) {
@@ -1473,21 +1482,126 @@
     if (video) video.srcObject = null;
   }
 
+  function emptyQrReadDiag() {
+    return { video: "", focus: "", detector: "", last: "", seen: "", invalid: "" };
+  }
+
   function resetQrReadView() {
     const camera = $("qr-read-camera");
     const result = $("qr-read-result");
     const status = $("qr-read-status");
     const error = $("qr-read-error");
+    const live = $("qr-read-live");
+    const guide = $("qr-read-guide");
     const img = $("qr-read-image");
     if (camera) camera.hidden = false;
     if (result) result.hidden = true;
     if (status) { status.hidden = true; status.textContent = ""; }
     if (error) { error.hidden = true; error.textContent = ""; }
+    if (live) live.textContent = "カメラを起動しています";
+    if (guide) guide.hidden = true;
     if (img) img.removeAttribute("src");
+    qrReadDiag = emptyQrReadDiag();
+    qrReadFrame = 0;
+    qrNativeFails = 0;
     if (qrReadBlobUrl) {
       URL.revokeObjectURL(qrReadBlobUrl);
       qrReadBlobUrl = null;
     }
+  }
+
+  function refreshQrReadLive() {
+    const el = $("qr-read-live");
+    if (!el) return;
+    if (qrReadDiag.invalid) {
+      el.textContent = "読み取った文字: " + qrReadDiag.invalid;
+      return;
+    }
+    const parts = [];
+    if (qrReadDiag.video) parts.push(qrReadDiag.video);
+    if (qrReadDiag.focus) parts.push("ピント" + qrReadDiag.focus);
+    parts.push("読取中");
+    el.textContent = parts.join(" · ");
+  }
+
+  function noteInvalidQr(text) {
+    const prefix = String(text || "").replace(/\s+/g, " ").trim().slice(0, 28);
+    qrReadDiag.invalid = prefix || "(空)";
+    qrReadDiag.seen = "形式不一致";
+    const error = $("qr-read-error");
+    if (error) {
+      error.hidden = false;
+      error.textContent = "QRは読み取りましたが、このアプリの形式ではありません";
+    }
+    refreshQrReadLive();
+  }
+
+  async function copyQrReadDiag() {
+    const d = qrReadDiag;
+    const text = [
+      "video: " + (d.video || "-"),
+      "focus: " + (d.focus || "-"),
+      "detector: " + (d.detector || "-"),
+      "last: " + (d.last || "-"),
+      "seen: " + (d.seen || "-"),
+      "invalid: " + (d.invalid || "-"),
+      "ua: " + navigator.userAgent,
+    ].join("\n");
+    const live = $("qr-read-live");
+    try {
+      await navigator.clipboard.writeText(text);
+      if (live) {
+        live.textContent = "状況をコピーしました";
+        setTimeout(refreshQrReadLive, 1600);
+      }
+    } catch (_) {
+      const error = $("qr-read-error");
+      if (error) {
+        error.hidden = false;
+        error.textContent = text;
+      }
+    }
+  }
+
+  function layoutQrGuide() {
+    const video = $("qr-read-video");
+    const guide = $("qr-read-guide");
+    if (!video || !guide) return;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const ew = video.clientWidth;
+    const eh = video.clientHeight;
+    if (!vw || !vh || !ew || !eh) {
+      guide.hidden = true;
+      return;
+    }
+    const scale = Math.min(ew / vw, eh / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const ox = (ew - dw) / 2;
+    const oy = (eh - dh) / 2;
+    const side = Math.min(vw, vh) * QR_CROP_RATIO * scale;
+    guide.hidden = false;
+    guide.style.left = (ox + (dw - side) / 2) + "px";
+    guide.style.top = (oy + (dh - side) / 2) + "px";
+    guide.style.width = side + "px";
+    guide.style.height = side + "px";
+  }
+
+  function bindQrGuide() {
+    unbindQrGuide();
+    qrGuideOnResize = () => layoutQrGuide();
+    window.addEventListener("resize", qrGuideOnResize);
+    const video = $("qr-read-video");
+    if (video) video.addEventListener("loadedmetadata", qrGuideOnResize);
+  }
+
+  function unbindQrGuide() {
+    if (!qrGuideOnResize) return;
+    window.removeEventListener("resize", qrGuideOnResize);
+    const video = $("qr-read-video");
+    if (video) video.removeEventListener("loadedmetadata", qrGuideOnResize);
+    qrGuideOnResize = null;
   }
 
   function leaveQrRead() {
@@ -1515,6 +1629,7 @@
       throw new Error("camera unavailable");
     }
     const attempts = [
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
       { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
       { video: true, audio: false },
     ];
@@ -1529,31 +1644,93 @@
     throw lastError || new Error("camera unavailable");
   }
 
-  async function readQrFromVideo(video, canvas, ctx) {
+  async function tuneQrReadTrack(stream) {
+    const track = stream && stream.getVideoTracks()[0];
+    if (!track || typeof track.getCapabilities !== "function") {
+      qrReadDiag.focus = "不明";
+      return;
+    }
+    const caps = track.getCapabilities() || {};
+    const modes = caps.focusMode || [];
+    if (modes.indexOf("continuous") >= 0) {
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        qrReadDiag.focus = "連続";
+        return;
+      } catch (_) {}
+    }
+    qrReadDiag.focus = modes.length ? "固定" : "固定";
+  }
+
+  function qrCenterCrop(w, h) {
+    const side = Math.max(1, Math.round(Math.min(w, h) * QR_CROP_RATIO));
+    const out = Math.min(side, QR_CROP_MAX);
+    return {
+      sx: Math.round((w - side) / 2),
+      sy: Math.round((h - side) / 2),
+      sw: side,
+      sh: side,
+      dw: out,
+      dh: out,
+    };
+  }
+
+  function jsQrFromRegion(video, canvas, ctx, box) {
+    if (typeof jsQR !== "function") return "";
+    if (canvas.width !== box.dw) canvas.width = box.dw;
+    if (canvas.height !== box.dh) canvas.height = box.dh;
+    ctx.drawImage(video, box.sx, box.sy, box.sw, box.sh, 0, 0, box.dw, box.dh);
+    const image = ctx.getImageData(0, 0, box.dw, box.dh);
+    const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" });
+    return code && code.data ? String(code.data) : "";
+  }
+
+  async function readNativeQr(video) {
+    if (!qrReadDetector) return "";
+    try {
+      const codes = await qrReadDetector.detect(video);
+      qrNativeFails = 0;
+      if (codes && codes.length && codes[0].rawValue) return String(codes[0].rawValue);
+      return "";
+    } catch (_) {
+      qrNativeFails++;
+      if (qrNativeFails >= 3) {
+        qrReadDetector = null;
+        qrReadDiag.detector = "jsQR";
+        refreshQrReadLive();
+      }
+      return "";
+    }
+  }
+
+  async function readQrFromVideo(video, canvas, ctx, frame) {
     const w = video.videoWidth;
     const h = video.videoHeight;
     if (!w || !h) return "";
-    const maxW = 1280;
-    const scale = w > maxW ? maxW / w : 1;
-    const cw = Math.max(1, Math.round(w * scale));
-    const ch = Math.max(1, Math.round(h * scale));
-    if (canvas.width !== cw) canvas.width = cw;
-    if (canvas.height !== ch) canvas.height = ch;
-    ctx.drawImage(video, 0, 0, cw, ch);
-    if (qrReadDetector) {
-      try {
-        const codes = await qrReadDetector.detect(canvas);
-        if (codes && codes.length && codes[0].rawValue) return String(codes[0].rawValue);
-      } catch (_) {
-        qrReadDetector = null;
-      }
+    if (qrReadDiag.video !== w + "×" + h) {
+      qrReadDiag.video = w + "×" + h;
+      refreshQrReadLive();
+      layoutQrGuide();
     }
-    if (typeof jsQR === "function") {
-      const image = ctx.getImageData(0, 0, cw, ch);
-      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" });
-      if (code && code.data) return String(code.data);
+    const phase = frame % 4;
+    if (phase === 1 && qrReadDetector) {
+      qrReadDiag.last = "ネイティブ";
+      return readNativeQr(video);
     }
-    return "";
+    if (phase === 3) {
+      qrReadDiag.last = "全体";
+      const scale = w > QR_FULL_MAX ? QR_FULL_MAX / w : 1;
+      return jsQrFromRegion(video, canvas, ctx, {
+        sx: 0,
+        sy: 0,
+        sw: w,
+        sh: h,
+        dw: Math.max(1, Math.round(w * scale)),
+        dh: Math.max(1, Math.round(h * scale)),
+      });
+    }
+    qrReadDiag.last = "中央";
+    return jsQrFromRegion(video, canvas, ctx, qrCenterCrop(w, h));
   }
 
   async function showQrReadSheet(text) {
@@ -1603,6 +1780,7 @@
     const video = $("qr-read-video");
     qrReadStop = false;
     qrReadDetector = await createQrDetector();
+    qrReadDiag.detector = qrReadDetector ? "BarcodeDetector" : "jsQR";
     try {
       qrReadStream = await openQrReadCamera();
     } catch (e) {
@@ -1611,13 +1789,22 @@
         error.hidden = false;
         error.textContent = "カメラを起動できませんでした";
       }
+      const live = $("qr-read-live");
+      if (live) live.textContent = "カメラを使えません";
       return;
     }
     if (!video) return;
+    video.playsInline = true;
     video.srcObject = qrReadStream;
+    bindQrGuide();
+    try {
+      await tuneQrReadTrack(qrReadStream);
+    } catch (_) {}
+    refreshQrReadLive();
     try {
       await video.play();
     } catch (_) {}
+    layoutQrGuide();
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const scanFrame = async () => {
@@ -1629,22 +1816,17 @@
       qrReadBusy = true;
       let text = "";
       try {
-        text = await readQrFromVideo(video, canvas, ctx);
+        text = await readQrFromVideo(video, canvas, ctx, qrReadFrame++);
       } catch (_) {
         text = "";
       }
       qrReadBusy = false;
       if (qrReadStop) return;
       if (text) {
-        qrReadStop = true;
+        qrReadDiag.seen = "読取";
         const ok = await showQrReadSheet(text);
-        if (!ok && !qrReadStop) {
-          qrReadRaf = requestAnimationFrame(scanFrame);
-        } else if (!ok) {
-          qrReadStop = false;
-          qrReadRaf = requestAnimationFrame(scanFrame);
-        }
-        return;
+        if (ok || qrReadStop) return;
+        noteInvalidQr(text);
       }
       qrReadRaf = requestAnimationFrame(scanFrame);
     };
@@ -1821,6 +2003,7 @@
     $("btn-qr-debug").addEventListener("click", openQrDebug);
     $("btn-qr-read").addEventListener("click", startQrRead);
     $("btn-back-qr-read").addEventListener("click", leaveQrRead);
+    $("btn-qr-diag").addEventListener("click", copyQrReadDiag);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
     $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
     $("btn-qr-debug-back").addEventListener("click", renderQrDebugList);

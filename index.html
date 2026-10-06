@@ -109,8 +109,13 @@
       </header>
       <div class="qr-read-main screen-enter">
         <div id="qr-read-camera">
-          <video id="qr-read-video" playsinline autoplay muted></video>
-          <p class="qr-read-note">QRをカメラに向けてください</p>
+          <div class="qr-read-stage">
+            <video id="qr-read-video" playsinline autoplay muted></video>
+            <div id="qr-read-guide" class="qr-read-guide" hidden></div>
+          </div>
+          <p class="qr-read-note">白い枠の中に、QR全体が入るように合わせてください</p>
+          <p id="qr-read-live" class="qr-read-live">カメラを起動しています</p>
+          <button type="button" class="btn-role btn-secondary btn-qr-diag" id="btn-qr-diag">状況をコピー</button>
           <p id="qr-read-error" class="qr-read-error" hidden></p>
         </div>
         <p id="qr-read-status" class="qr-read-note" hidden></p>
