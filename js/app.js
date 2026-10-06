@@ -1541,6 +1541,16 @@
     const shade = $("qr-read-shade");
     const guide = $("qr-read-guide");
     if (!video || !shade || !guide) return;
+    const stage = video.parentElement;
+    const wide = window.matchMedia("(min-aspect-ratio: 1/1)").matches;
+    if (!wide) {
+      video.style.width = "";
+      video.style.height = "";
+    } else if (stage && video.videoWidth && video.videoHeight && stage.clientWidth && stage.clientHeight) {
+      const fit = Math.min(stage.clientWidth / video.videoWidth, stage.clientHeight / video.videoHeight);
+      video.style.width = Math.max(1, Math.floor(video.videoWidth * fit)) + "px";
+      video.style.height = Math.max(1, Math.floor(video.videoHeight * fit)) + "px";
+    }
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     const ew = video.clientWidth;
@@ -1552,8 +1562,10 @@
     const scale = Math.min(ew / vw, eh / vh);
     const dw = vw * scale;
     const dh = vh * scale;
-    const ox = (ew - dw) / 2;
-    const oy = (eh - dh) / 2;
+    const stageRect = stage ? stage.getBoundingClientRect() : null;
+    const videoRect = video.getBoundingClientRect();
+    const ox = (stageRect ? videoRect.left - stageRect.left : 0) + (ew - dw) / 2;
+    const oy = (stageRect ? videoRect.top - stageRect.top : 0) + (eh - dh) / 2;
     const side = Math.min(vw, vh) * QR_CROP_RATIO * scale;
     shade.hidden = false;
     shade.style.left = ox + "px";

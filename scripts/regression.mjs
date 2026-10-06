@@ -345,14 +345,29 @@ async function main() {
         vh: window.innerHeight,
         qrOpen: qrOverlay.classList.contains("active") && !!(qrImg && qrImg.src),
         videoW: video.getBoundingClientRect().width,
+        videoH: video.getBoundingClientRect().height,
+        stageW: video.parentElement.getBoundingClientRect().width,
+        aspectOk: !video.videoWidth || Math.abs((video.getBoundingClientRect().width / video.getBoundingClientRect().height) - (video.videoWidth / video.videoHeight)) < 0.15,
         readNoteBottom: readNote.getBoundingClientRect().bottom,
         shadeOverflow: getComputedStyle(shade).overflow,
+        cameraHidden: (function () {
+          const camera = document.getElementById("qr-read-camera");
+          const result = document.getElementById("qr-read-result");
+          camera.hidden = true;
+          result.hidden = false;
+          const display = getComputedStyle(camera).display;
+          const h = camera.getBoundingClientRect().height;
+          camera.hidden = false;
+          result.hidden = true;
+          return display === "none" && h === 0;
+        })(),
       };
     });
     push("PCで出力ポップアップが画面内", wide.boxBottom <= wide.vh + 1 && wide.actionsBottom <= wide.vh + 1, `bottom ${Math.round(wide.actionsBottom)} / ${wide.vh}, image ${Math.round(wide.imgW)}x${Math.round(wide.imgH)}`);
     push("出力QRボタンが右上", wide.qrOnCorner && wide.textClear);
     push("表示中パーティのQR", wide.qrOpen);
-    push("PCの読み取りプレビュー", wide.videoW >= 560 && wide.readNoteBottom <= wide.vh + 1, `video ${Math.round(wide.videoW)} note ${Math.round(wide.readNoteBottom)}/${wide.vh}`);
+    push("PCの読み取りプレビュー", wide.stageW >= 900 && wide.videoH >= 400 && wide.aspectOk && wide.readNoteBottom <= wide.vh + 1, `stage ${Math.round(wide.stageW)} video ${Math.round(wide.videoW)}x${Math.round(wide.videoH)} note ${Math.round(wide.readNoteBottom)}/${wide.vh}`);
+    push("読み取り後にカメラが残らない", wide.cameraHidden);
     push("枠のグレーはカメラ内", wide.shadeOverflow === "hidden", wide.shadeOverflow);
 
     await page.setViewport({ width: 390, height: 844 });
