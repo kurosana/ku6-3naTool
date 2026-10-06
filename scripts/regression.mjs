@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.6", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.7", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -432,7 +432,7 @@ async function main() {
     push("縦画面は確認を下に並べる", confirmPhone.leadBelow && confirmPhone.centered && confirmPhone.sideBySide, confirmPhone.rows);
 
     await page.setViewport({ width: 1400, height: 800 });
-    const backToCamera = await page.evaluate(() => {
+    const backToCamera = await page.evaluate(async () => {
       const output = document.getElementById("overlay-output");
       const qr = document.getElementById("overlay-qr-debug");
       if (output) output.classList.remove("active");
@@ -443,15 +443,39 @@ async function main() {
       }
       document.getElementById("qr-read-camera").hidden = true;
       document.getElementById("qr-read-result").hidden = false;
-      window.print = () => window.dispatchEvent(new Event("afterprint"));
+      const append = document.body.appendChild.bind(document.body);
+      document.body.appendChild = function (node) {
+        const added = append(node);
+        if (node && node.tagName === "IFRAME" && node.contentWindow) {
+          node.contentWindow.print = () => {
+            const doc = node.contentDocument;
+            const printed = doc.querySelector("img");
+            const style = doc.querySelector("style");
+            window.__sheetPrint = {
+              imgs: doc.querySelectorAll("img").length,
+              extraText: (doc.body.innerText || "").replace(/\s/g, ""),
+              style: style ? style.textContent : "",
+              src: printed ? printed.getAttribute("src") : "",
+            };
+            node.contentWindow.dispatchEvent(new Event("afterprint"));
+          };
+        }
+        return added;
+      };
       document.getElementById("btn-qr-print").click();
+      const start = Date.now();
+      while (document.getElementById("qr-read-camera").hidden && Date.now() - start < 3000) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const printed = window.__sheetPrint || {};
       return {
         camera: !document.getElementById("qr-read-camera").hidden,
         result: document.getElementById("qr-read-result").hidden,
         printing: document.body.classList.contains("sheet-print"),
+        imageOnly: printed.imgs === 1 && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && !!printed.src,
       };
     });
-    push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing, JSON.stringify(backToCamera));
+    push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing && backToCamera.imageOnly, JSON.stringify(backToCamera));
 
     browserTests.forEach((t) => push(t.name, t.ok, t.detail));
   } finally {

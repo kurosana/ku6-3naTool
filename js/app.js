@@ -1772,25 +1772,47 @@
   function printQrSheet() {
     if (qrPrintBusy) return;
     const img = $("qr-read-image");
-    if (!img || !img.getAttribute("src")) return;
+    const src = img && img.getAttribute("src");
+    if (!src) return;
     qrPrintBusy = true;
-    document.body.classList.add("sheet-print");
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "パーティシート印刷");
+    frame.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;border:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+    doc.open();
+    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;background:#fff}img{display:block;width:148mm;height:210mm;object-fit:fill}</style></head><body></body></html>");
+    doc.close();
+    const printed = doc.createElement("img");
+    printed.alt = "パーティシート";
+    doc.body.appendChild(printed);
     let finished = false;
+    let started = false;
     const finish = () => {
       if (finished) return;
       finished = true;
       qrPrintBusy = false;
-      document.body.classList.remove("sheet-print");
-      window.removeEventListener("afterprint", finish);
+      win.removeEventListener("afterprint", finish);
+      frame.remove();
       startQrRead();
     };
-    window.addEventListener("afterprint", finish);
-    try {
-      window.print();
-    } catch (e) {
-      console.error("[印刷]", e);
-      finish();
-    }
+    const go = () => {
+      if (started) return;
+      started = true;
+      try {
+        win.focus();
+        win.print();
+      } catch (e) {
+        console.error("[印刷]", e);
+        finish();
+      }
+    };
+    win.addEventListener("afterprint", finish);
+    printed.onload = go;
+    printed.onerror = finish;
+    printed.src = src;
+    if (printed.complete && printed.naturalWidth) go();
   }
 
   async function startQrRead() {
