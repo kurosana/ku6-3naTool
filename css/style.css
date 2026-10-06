@@ -1755,10 +1755,18 @@ a.btn-role {
 }
 @media (min-aspect-ratio: 1/1) {
   #qr-read-result {
+    position: relative;
+    container-type: size;
+    overflow: visible;
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     grid-template-rows: minmax(0, 1fr);
   }
   .qr-read-confirm {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -1rem;
+    left: calc((60cqi + min(60cqi, 100cqb * 1748 / 2480)) / 2);
     gap: 2.5rem;
     padding: 1.25rem;
   }

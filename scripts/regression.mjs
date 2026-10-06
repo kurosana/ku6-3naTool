@@ -403,6 +403,7 @@ async function main() {
         zoneRatio: zone.width / resultBox.width,
         leadAfterImage: lr.left >= ir.right - 2,
         leadCentered: Math.abs(midY(lr) - midY(confirm)) < confirm.height * 0.28,
+        fieldCentered: Math.abs(mid(lr) - (ir.right + window.innerWidth) / 2) < 14 && Math.abs(((btns[0].left + btns[1].right) / 2) - (ir.right + window.innerWidth) / 2) < 14,
         oneLine: leadStyle.whiteSpace === "nowrap" && lead.scrollWidth <= lead.clientWidth + 1,
         sideBySide: btns.length === 2 && btns[1].left >= btns[0].right - 1 && Math.abs(btns[0].top - btns[1].top) < 6,
         lead: lead.textContent,
@@ -410,7 +411,7 @@ async function main() {
         print: document.getElementById("btn-qr-print").className,
       };
     });
-    push("横長はシートの右に確認", confirmWide.cols.split(" ").length === 2 && confirmWide.centered && confirmWide.imgFills && confirmWide.zoneRatio > 0.55 && confirmWide.zoneRatio < 0.65 && confirmWide.leadAfterImage && confirmWide.leadCentered && confirmWide.sideBySide && confirmWide.oneLine, confirmWide.cols);
+    push("横長はシートの右に確認", confirmWide.cols.split(" ").length === 2 && confirmWide.centered && confirmWide.imgFills && confirmWide.zoneRatio > 0.55 && confirmWide.zoneRatio < 0.65 && confirmWide.leadAfterImage && confirmWide.leadCentered && confirmWide.fieldCentered && confirmWide.sideBySide && confirmWide.oneLine, confirmWide.cols);
     push("印刷確認の文言とボタン", confirmWide.lead.indexOf("確認してください") >= 0 && confirmWide.cancel.indexOf("btn-secondary") >= 0 && confirmWide.print.indexOf("btn-primary") >= 0);
 
     await page.setViewport({ width: 390, height: 844 });
