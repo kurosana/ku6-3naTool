@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.2", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.3", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -376,6 +376,55 @@ async function main() {
       return img ? getComputedStyle(img).maxHeight : "";
     });
     push("スマホの出力画像は従来の高さ", phone === "none", phone);
+
+    await page.setViewport({ width: 1400, height: 800 });
+    const confirmWide = await page.evaluate(async () => {
+      const camera = document.getElementById("qr-read-camera");
+      const result = document.getElementById("qr-read-result");
+      const img = document.getElementById("qr-read-image");
+      img.src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1748" height="2480"><rect width="1748" height="2480" fill="#ddd"/></svg>');
+      camera.hidden = true;
+      result.hidden = false;
+      try { await img.decode(); } catch (_) {}
+      const lead = document.querySelector(".qr-read-confirm-lead");
+      const ir = img.getBoundingClientRect();
+      const lr = lead.getBoundingClientRect();
+      return {
+        dir: getComputedStyle(result).flexDirection,
+        leadAfterImage: lr.left > ir.left,
+        lead: lead.textContent,
+        cancel: document.getElementById("btn-qr-print-cancel").className,
+        print: document.getElementById("btn-qr-print").className,
+      };
+    });
+    push("横長はシートの右に確認", confirmWide.dir === "row" && confirmWide.leadAfterImage, confirmWide.dir);
+    push("印刷確認の文言とボタン", confirmWide.lead.indexOf("確認してください") >= 0 && confirmWide.cancel.indexOf("btn-secondary") >= 0 && confirmWide.print.indexOf("btn-primary") >= 0);
+
+    await page.setViewport({ width: 390, height: 844 });
+    const confirmPhone = await page.evaluate(() => getComputedStyle(document.getElementById("qr-read-result")).flexDirection);
+    push("縦画面は確認を下に並べる", confirmPhone === "column", confirmPhone);
+
+    await page.setViewport({ width: 1400, height: 800 });
+    const backToCamera = await page.evaluate(() => {
+      const output = document.getElementById("overlay-output");
+      const qr = document.getElementById("overlay-qr-debug");
+      if (output) output.classList.remove("active");
+      if (qr) qr.classList.remove("active");
+      const img = document.getElementById("qr-read-image");
+      if (!img.getAttribute("src")) {
+        img.src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1748" height="2480"><rect width="1748" height="2480" fill="#ddd"/></svg>');
+      }
+      document.getElementById("qr-read-camera").hidden = true;
+      document.getElementById("qr-read-result").hidden = false;
+      window.print = () => window.dispatchEvent(new Event("afterprint"));
+      document.getElementById("btn-qr-print").click();
+      return {
+        camera: !document.getElementById("qr-read-camera").hidden,
+        result: document.getElementById("qr-read-result").hidden,
+        printing: document.body.classList.contains("sheet-print"),
+      };
+    });
+    push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing, JSON.stringify(backToCamera));
 
     browserTests.forEach((t) => push(t.name, t.ok, t.detail));
   } finally {

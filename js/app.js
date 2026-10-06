@@ -50,6 +50,7 @@
   let qrReadDetector = null;
   let qrReadBlobUrl = null;
   let qrReadFrame = 0;
+  let qrPrintBusy = false;
   let qrNativeFails = 0;
   let qrGuideOnResize = null;
   let qrReadDiag = emptyQrReadDiag();
@@ -1595,6 +1596,7 @@
   }
 
   function leaveQrRead() {
+    document.body.classList.remove("sheet-print");
     stopQrReadCamera();
     hideProgress();
     resetQrReadView();
@@ -1760,6 +1762,35 @@
       hideProgress();
     }
     return true;
+  }
+
+  function cancelQrPrint() {
+    if (qrPrintBusy) return;
+    startQrRead();
+  }
+
+  function printQrSheet() {
+    if (qrPrintBusy) return;
+    const img = $("qr-read-image");
+    if (!img || !img.getAttribute("src")) return;
+    qrPrintBusy = true;
+    document.body.classList.add("sheet-print");
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      qrPrintBusy = false;
+      document.body.classList.remove("sheet-print");
+      window.removeEventListener("afterprint", finish);
+      startQrRead();
+    };
+    window.addEventListener("afterprint", finish);
+    try {
+      window.print();
+    } catch (e) {
+      console.error("[印刷]", e);
+      finish();
+    }
   }
 
   async function startQrRead() {
@@ -1944,6 +1975,8 @@
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
     $("btn-qr-read").addEventListener("click", startQrRead);
     $("btn-back-qr-read").addEventListener("click", leaveQrRead);
+    $("btn-qr-print-cancel").addEventListener("click", cancelQrPrint);
+    $("btn-qr-print").addEventListener("click", printQrSheet);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
     $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
     $("btn-back-version").addEventListener("click", () => showScreen("top"));

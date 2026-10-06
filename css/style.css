@@ -1690,18 +1690,98 @@ a.btn-role {
   min-height: 0;
   width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: .85rem;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 0 .2rem .5rem;
 }
 #qr-read-result[hidden] { display: none; }
 #qr-read-image {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(100%, calc((100dvh - 8rem) * 0.72));
-  max-height: calc(100dvh - 8rem);
-  margin: 0 auto;
+  max-width: 100%;
+  max-height: min(58dvh, calc(100dvh - 16rem));
+  margin: 0;
   background: #fff;
+  object-fit: contain;
+}
+.qr-read-confirm {
+  width: min(100%, 28rem);
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+  flex-shrink: 0;
+}
+.qr-read-confirm-lead {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1.4;
+  text-align: center;
+}
+.qr-read-confirm-actions {
+  display: flex;
+  gap: .6rem;
+}
+.qr-read-confirm-actions .btn-role {
+  flex: 1;
+  padding: .8rem .5rem;
+  font-size: 1rem;
+  border-radius: var(--radius-sm);
+}
+@media (min-aspect-ratio: 1/1) {
+  #qr-read-result {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1.25rem;
+    padding: 0 .8rem .2rem 0;
+  }
+  #qr-read-image {
+    max-height: calc(100dvh - 7.5rem);
+    max-width: calc(100% - 18rem);
+    margin-right: auto;
+  }
+  .qr-read-confirm {
+    width: min(22rem, 34vw);
+    align-self: flex-start;
+    padding-top: .35rem;
+  }
+  .qr-read-confirm-lead {
+    font-size: clamp(1.28rem, 1.9vw, 1.75rem);
+    text-align: left;
+  }
+  .qr-read-confirm-actions {
+    flex-direction: column;
+  }
+}
+@media print {
+  body.sheet-print {
+    background: #fff !important;
+  }
+  body.sheet-print * {
+    visibility: hidden !important;
+  }
+  body.sheet-print #qr-read-image {
+    visibility: visible !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 148mm !important;
+    height: 210mm !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    object-fit: fill !important;
+  }
+}
+@page {
+  size: A5 portrait;
+  margin: 0;
 }
 .qr-read-note {
   flex-shrink: 0;
