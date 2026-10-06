@@ -148,8 +148,8 @@ async function main() {
       assert("jsQR", typeof jsQR === "function");
 
       assert("DOM 主要画面", !!document.getElementById("screen-top") && !!document.getElementById("screen-sheet"));
-      assert("DOM QRデバッグ", !!document.getElementById("overlay-qr-debug"));
-      assert("DOM QR読み取りガイド", !!document.getElementById("qr-read-guide") && !!document.getElementById("btn-qr-diag"));
+      assert("DOM 印刷QR", !!document.getElementById("overlay-qr-debug") && !!document.getElementById("btn-output-qr") && !document.getElementById("btn-qr-debug"));
+      assert("DOM QR読み取りガイド", !!document.getElementById("qr-read-shade") && !!document.getElementById("qr-read-guide") && !document.getElementById("btn-qr-diag"));
       assert("DOM スロットピッカー用クラスCSS", !!document.querySelector('link[href*="style.css"]'));
 
       // QR codec（app.js から抽出した同一実装）
@@ -308,6 +308,59 @@ async function main() {
     });
     push("QR読み取り画面の案内", cam.note.indexOf("白い枠") >= 0, cam.note);
     push("QR読み取りの状態表示", !!cam.live, cam.live);
+
+    await page.setViewport({ width: 1400, height: 800 });
+    const wide = await page.evaluate(async () => {
+      const overlay = document.getElementById("overlay-output");
+      const box = overlay.querySelector(".preview-overlay-box");
+      const content = document.getElementById("output-overlay-content");
+      content.innerHTML = "";
+      const img = new Image();
+      img.alt = "sheet";
+      img.src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1748" height="2480"><rect width="1748" height="2480" fill="#ddd"/></svg>');
+      content.appendChild(img);
+      overlay.classList.add("active");
+      await img.decode();
+      const r = box.getBoundingClientRect();
+      const ir = img.getBoundingClientRect();
+      const qrBtn = document.getElementById("btn-output-qr");
+      const qr = qrBtn.getBoundingClientRect();
+      const noteEl = overlay.querySelector(".preview-overlay-note");
+      const note = noteEl.getBoundingClientRect();
+      const textRight = note.right - parseFloat(getComputedStyle(noteEl).paddingRight);
+      const actions = overlay.querySelector(".output-actions").getBoundingClientRect();
+      document.getElementById("btn-output-qr").click();
+      const qrOverlay = document.getElementById("overlay-qr-debug");
+      const qrImg = qrOverlay.querySelector(".qr-debug-image-wrap img");
+      const video = document.getElementById("qr-read-video");
+      const readNote = document.querySelector("#qr-read-camera .qr-read-note");
+      const shade = document.getElementById("qr-read-shade");
+      return {
+        boxBottom: r.bottom,
+        actionsBottom: actions.bottom,
+        imgH: ir.height,
+        imgW: ir.width,
+        qrOnCorner: qr.top <= r.top + 16 && qr.right >= r.right - 16 && qr.left > r.left + r.width * 0.55,
+        textClear: textRight <= qr.left + 1,
+        vh: window.innerHeight,
+        qrOpen: qrOverlay.classList.contains("active") && !!(qrImg && qrImg.src),
+        videoW: video.getBoundingClientRect().width,
+        readNoteBottom: readNote.getBoundingClientRect().bottom,
+        shadeOverflow: getComputedStyle(shade).overflow,
+      };
+    });
+    push("PCで出力ポップアップが画面内", wide.boxBottom <= wide.vh + 1 && wide.actionsBottom <= wide.vh + 1, `bottom ${Math.round(wide.actionsBottom)} / ${wide.vh}, image ${Math.round(wide.imgW)}x${Math.round(wide.imgH)}`);
+    push("出力QRボタンが右上", wide.qrOnCorner && wide.textClear);
+    push("表示中パーティのQR", wide.qrOpen);
+    push("PCの読み取りプレビュー", wide.videoW >= 560 && wide.readNoteBottom <= wide.vh + 1, `video ${Math.round(wide.videoW)} note ${Math.round(wide.readNoteBottom)}/${wide.vh}`);
+    push("枠のグレーはカメラ内", wide.shadeOverflow === "hidden", wide.shadeOverflow);
+
+    await page.setViewport({ width: 390, height: 844 });
+    const phone = await page.evaluate(() => {
+      const img = document.querySelector("#output-overlay-content img");
+      return img ? getComputedStyle(img).maxHeight : "";
+    });
+    push("スマホの出力画像は従来の高さ", phone === "none", phone);
 
     browserTests.forEach((t) => push(t.name, t.ok, t.detail));
   } finally {

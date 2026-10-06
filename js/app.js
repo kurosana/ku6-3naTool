@@ -1492,14 +1492,14 @@
     const status = $("qr-read-status");
     const error = $("qr-read-error");
     const live = $("qr-read-live");
-    const guide = $("qr-read-guide");
+    const shade = $("qr-read-shade");
     const img = $("qr-read-image");
     if (camera) camera.hidden = false;
     if (result) result.hidden = true;
     if (status) { status.hidden = true; status.textContent = ""; }
     if (error) { error.hidden = true; error.textContent = ""; }
     if (live) live.textContent = "カメラを起動しています";
-    if (guide) guide.hidden = true;
+    if (shade) shade.hidden = true;
     if (img) img.removeAttribute("src");
     qrReadDiag = emptyQrReadDiag();
     qrReadFrame = 0;
@@ -1536,43 +1536,17 @@
     refreshQrReadLive();
   }
 
-  async function copyQrReadDiag() {
-    const d = qrReadDiag;
-    const text = [
-      "video: " + (d.video || "-"),
-      "focus: " + (d.focus || "-"),
-      "detector: " + (d.detector || "-"),
-      "last: " + (d.last || "-"),
-      "seen: " + (d.seen || "-"),
-      "invalid: " + (d.invalid || "-"),
-      "ua: " + navigator.userAgent,
-    ].join("\n");
-    const live = $("qr-read-live");
-    try {
-      await navigator.clipboard.writeText(text);
-      if (live) {
-        live.textContent = "状況をコピーしました";
-        setTimeout(refreshQrReadLive, 1600);
-      }
-    } catch (_) {
-      const error = $("qr-read-error");
-      if (error) {
-        error.hidden = false;
-        error.textContent = text;
-      }
-    }
-  }
-
   function layoutQrGuide() {
     const video = $("qr-read-video");
+    const shade = $("qr-read-shade");
     const guide = $("qr-read-guide");
-    if (!video || !guide) return;
+    if (!video || !shade || !guide) return;
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     const ew = video.clientWidth;
     const eh = video.clientHeight;
     if (!vw || !vh || !ew || !eh) {
-      guide.hidden = true;
+      shade.hidden = true;
       return;
     }
     const scale = Math.min(ew / vw, eh / vh);
@@ -1581,9 +1555,13 @@
     const ox = (ew - dw) / 2;
     const oy = (eh - dh) / 2;
     const side = Math.min(vw, vh) * QR_CROP_RATIO * scale;
-    guide.hidden = false;
-    guide.style.left = (ox + (dw - side) / 2) + "px";
-    guide.style.top = (oy + (dh - side) / 2) + "px";
+    shade.hidden = false;
+    shade.style.left = ox + "px";
+    shade.style.top = oy + "px";
+    shade.style.width = dw + "px";
+    shade.style.height = dh + "px";
+    guide.style.left = ((dw - side) / 2) + "px";
+    guide.style.top = ((dh - side) / 2) + "px";
     guide.style.width = side + "px";
     guide.style.height = side + "px";
   }
@@ -1833,14 +1811,6 @@
     qrReadRaf = requestAnimationFrame(scanFrame);
   }
 
-  function openQrDebug() {
-    const overlay = $("overlay-qr-debug");
-    if (!overlay) return;
-    renderQrDebugList();
-    overlay.classList.add("active");
-    overlay.setAttribute("aria-hidden", "false");
-  }
-
   function closeQrDebug() {
     const overlay = $("overlay-qr-debug");
     if (!overlay) return;
@@ -1848,60 +1818,18 @@
     overlay.setAttribute("aria-hidden", "true");
   }
 
-  function renderQrDebugList() {
+  function openCurrentPartyQr() {
+    const overlay = $("overlay-qr-debug");
     const title = $("qr-debug-title");
     const body = $("qr-debug-body");
-    const back = $("btn-qr-debug-back");
-    if (title) title.textContent = "保存データを選択";
-    if (back) back.hidden = true;
-    if (!body) return;
-    const slots = StorageService.getPartySlots();
-    const filled = slots.map((s, i) => ({ s, i })).filter((x) => x.s && x.s.json);
-    if (!filled.length) {
-      body.innerHTML = '<p class="list-empty">保存データがありません</p>';
-      return;
-    }
-    body.innerHTML = '<div class="slot-picker-list">' + filled.map(({ s, i }) => {
-      const name = s.name || ("パーティ" + (i + 1));
-      const date = s.at ? new Date(s.at).toLocaleString("ja-JP") : "";
-      const pics = renderSlotPokemonRow(s.json);
-      return `
-        <button type="button" class="data-slot-card data-slot-card--pick" data-qr-slot="${i}">
-          <div class="data-slot-body">
-            <div class="data-slot-header">
-              <span class="data-slot-name">${escapeHtml(name)}</span>
-              <span class="data-slot-date">${escapeHtml(date)}</span>
-            </div>
-            <div class="data-slot-pokemon">${pics}</div>
-          </div>
-        </button>`;
-    }).join("") + "</div>";
-    body.querySelectorAll("[data-qr-slot]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        renderQrDebugCode(parseInt(btn.getAttribute("data-qr-slot"), 10));
-      });
-    });
-  }
-
-  function renderQrDebugCode(index) {
-    const title = $("qr-debug-title");
-    const body = $("qr-debug-body");
-    const back = $("btn-qr-debug-back");
-    const slots = StorageService.getPartySlots();
-    const slot = slots[index];
-    if (!slot || !slot.json || !body) {
-      renderQrDebugList();
-      return;
-    }
-    const name = slot.name || ("パーティ" + (index + 1));
-    if (title) title.textContent = name;
-    if (back) back.hidden = false;
+    if (!overlay || !body) return;
+    if (title) title.textContent = "印刷用QR";
     let payload = "";
     let qrUrl = "";
     let version = "";
     let error = "";
     try {
-      payload = partyJsonToPrintText(slot.json);
+      payload = partyJsonToPrintText(buildPartyJson(state));
       if (typeof qrcode !== "function") throw new Error("qrcode missing");
       const qr = qrcode(0, "Q");
       qr.addData(payload, "Alphanumeric");
@@ -1910,17 +1838,19 @@
       version = String((qr.getModuleCount() - 17) / 4);
     } catch (e) {
       error = "QRを作れませんでした";
-      console.error("[QRデバッグ]", e);
+      console.error("[印刷QR]", e);
     }
     if (error) {
       body.innerHTML = `<p class="list-empty">${escapeHtml(error)}</p>`;
-      return;
+    } else {
+      body.innerHTML = `
+        <p class="qr-debug-note">別の端末で「QR読み取り」を開き、このQRをカメラに向けてください。</p>
+        <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="表示中のパーティのQR"></div>
+        <p class="qr-debug-meta">${payload.length}文字 / バージョン${escapeHtml(version)}</p>
+        <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
     }
-    body.innerHTML = `
-      <p class="qr-debug-note">別の端末で「QR読み取り」を開き、このQRをカメラに向けてください。</p>
-      <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="保存データのQR"></div>
-      <p class="qr-debug-meta">${payload.length}文字 / バージョン${escapeHtml(version)}</p>
-      <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
   }
 
   function initGuide() {
@@ -2000,13 +1930,10 @@
   function initEventListeners() {
     $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
-    $("btn-qr-debug").addEventListener("click", openQrDebug);
     $("btn-qr-read").addEventListener("click", startQrRead);
     $("btn-back-qr-read").addEventListener("click", leaveQrRead);
-    $("btn-qr-diag").addEventListener("click", copyQrReadDiag);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
     $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
-    $("btn-qr-debug-back").addEventListener("click", renderQrDebugList);
     $("btn-back-version").addEventListener("click", () => showScreen("top"));
     $("btn-back-top").addEventListener("click", () => showScreen("top"));
     $("btn-new-party").addEventListener("click", openSheetFresh);
@@ -2036,6 +1963,7 @@
     $("btn-close-output").addEventListener("click", closeOutputOverlay);
     $("output-backdrop").addEventListener("click", closeOutputOverlay);
     $("btn-download-image").addEventListener("click", downloadOutputImage);
+    $("btn-output-qr").addEventListener("click", openCurrentPartyQr);
     $("btn-save-to-slot").addEventListener("click", openSlotPicker);
     $("btn-slot-picker-cancel").addEventListener("click", closeSlotPicker);
     $("slot-picker-backdrop").addEventListener("click", closeSlotPicker);
