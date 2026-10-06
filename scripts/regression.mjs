@@ -389,20 +389,34 @@ async function main() {
       const lead = document.querySelector(".qr-read-confirm-lead");
       const ir = img.getBoundingClientRect();
       const lr = lead.getBoundingClientRect();
+      const zone = img.parentElement.getBoundingClientRect();
+      const leadStyle = getComputedStyle(lead);
       return {
-        dir: getComputedStyle(result).flexDirection,
-        leadAfterImage: lr.left > ir.left,
+        cols: getComputedStyle(result).gridTemplateColumns,
+        leadAfterImage: lr.left >= ir.right - 2,
+        imageInZone: ir.left >= zone.left - 1 && ir.right <= zone.right + 1,
+        oneLine: leadStyle.whiteSpace === "nowrap" && lead.scrollWidth <= lead.clientWidth + 1,
+        actions: getComputedStyle(document.querySelector(".qr-read-confirm-actions")).flexDirection,
         lead: lead.textContent,
         cancel: document.getElementById("btn-qr-print-cancel").className,
         print: document.getElementById("btn-qr-print").className,
       };
     });
-    push("横長はシートの右に確認", confirmWide.dir === "row" && confirmWide.leadAfterImage, confirmWide.dir);
+    push("横長はシートの右に確認", confirmWide.cols.split(" ").length === 2 && confirmWide.leadAfterImage && confirmWide.imageInZone && confirmWide.actions === "row" && confirmWide.oneLine, confirmWide.cols);
     push("印刷確認の文言とボタン", confirmWide.lead.indexOf("確認してください") >= 0 && confirmWide.cancel.indexOf("btn-secondary") >= 0 && confirmWide.print.indexOf("btn-primary") >= 0);
 
     await page.setViewport({ width: 390, height: 844 });
-    const confirmPhone = await page.evaluate(() => getComputedStyle(document.getElementById("qr-read-result")).flexDirection);
-    push("縦画面は確認を下に並べる", confirmPhone === "column", confirmPhone);
+    const confirmPhone = await page.evaluate(() => {
+      const result = document.getElementById("qr-read-result");
+      const img = document.getElementById("qr-read-image").getBoundingClientRect();
+      const lead = document.querySelector(".qr-read-confirm-lead").getBoundingClientRect();
+      return {
+        rows: getComputedStyle(result).gridTemplateRows,
+        leadBelow: lead.top >= img.bottom - 2,
+        actions: getComputedStyle(document.querySelector(".qr-read-confirm-actions")).flexDirection,
+      };
+    });
+    push("縦画面は確認を下に並べる", confirmPhone.leadBelow && confirmPhone.actions === "row", confirmPhone.rows);
 
     await page.setViewport({ width: 1400, height: 800 });
     const backToCamera = await page.evaluate(() => {

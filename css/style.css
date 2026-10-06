@@ -1689,43 +1689,54 @@ a.btn-role {
   flex: 1;
   min-height: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: .85rem;
-  overflow: auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 3fr 2fr;
+  align-items: stretch;
+  overflow: hidden;
   box-sizing: border-box;
-  padding: 0 .2rem .5rem;
 }
 #qr-read-result[hidden] { display: none; }
+.qr-read-sheet-zone {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 #qr-read-image {
   display: block;
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: min(58dvh, calc(100dvh - 16rem));
+  max-height: 100%;
   margin: 0;
   background: #fff;
   object-fit: contain;
 }
 .qr-read-confirm {
-  width: min(100%, 28rem);
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: .8rem;
-  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: .4rem 1rem .9rem;
+  box-sizing: border-box;
 }
 .qr-read-confirm-lead {
   margin: 0;
-  font-size: 1.15rem;
+  max-width: 100%;
+  font-size: 1.05rem;
   font-weight: 900;
-  line-height: 1.4;
+  line-height: 1.35;
   text-align: center;
 }
 .qr-read-confirm-actions {
   display: flex;
   gap: .6rem;
+  width: min(100%, 28rem);
 }
 .qr-read-confirm-actions .btn-role {
   flex: 1;
@@ -1735,28 +1746,24 @@ a.btn-role {
 }
 @media (min-aspect-ratio: 1/1) {
   #qr-read-result {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 1.25rem;
-    padding: 0 .8rem .2rem 0;
+    grid-template-columns: 3fr 2fr;
+    grid-template-rows: 1fr;
   }
   #qr-read-image {
-    max-height: calc(100dvh - 7.5rem);
-    max-width: calc(100% - 18rem);
-    margin-right: auto;
+    max-height: min(100%, calc(100dvh - 7.5rem));
   }
   .qr-read-confirm {
-    width: min(22rem, 34vw);
-    align-self: flex-start;
-    padding-top: .35rem;
+    gap: 2rem;
+    padding: 1rem 1.1rem;
+    container-type: inline-size;
   }
   .qr-read-confirm-lead {
-    font-size: clamp(1.28rem, 1.9vw, 1.75rem);
-    text-align: left;
+    white-space: nowrap;
+    font-size: min(1.5rem, calc(100cqw / 24));
+    line-height: 1.3;
   }
   .qr-read-confirm-actions {
-    flex-direction: column;
+    width: min(100%, 24rem);
   }
 }
 @media print {
