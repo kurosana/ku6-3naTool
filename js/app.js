@@ -1227,27 +1227,112 @@
     return out;
   }
 
-  function partyJsonToPrintText(json) {
-    const first = (v) => (Array.isArray(v) ? (v[0] || "") : "");
-    const body = {
-      n: json && typeof json.trainerName === "string" ? json.trainerName : "",
-      t: json && typeof json.trainerId === "string" ? json.trainerId : "",
-      f: json && json.friendCode != null ? String(json.friendCode) : "",
-      p: Array.isArray(json && json.pokemons) ? json.pokemons.slice(0, 6).map((mon) => {
-        if (!mon || typeof mon !== "object") return null;
-        return [
-          mon.dex == null ? null : mon.dex,
-          mon.CP == null ? null : mon.CP,
-          mon.shadow ? 1 : 0,
-          mon.light ? 1 : 0,
-          first(mon.fastMoves),
-          first(mon.chargedMoves1),
-          first(mon.chargedMoves2),
-          first(mon.thirdMoves),
-        ];
-      }) : [],
+  function BitWriter() {
+    this.bytes = [];
+    this.acc = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.write = function (value, width) {
+    let v = value >>> 0;
+    for (let i = width - 1; i >= 0; i--) {
+      this.acc = (this.acc << 1) | ((v >>> i) & 1);
+      this.nbits++;
+      if (this.nbits === 8) {
+        this.bytes.push(this.acc & 0xff);
+        this.acc = 0;
+        this.nbits = 0;
+      }
+    }
+  };
+  BitWriter.prototype.finish = function () {
+    if (this.nbits) this.bytes.push((this.acc << (8 - this.nbits)) & 0xff);
+    return new Uint8Array(this.bytes);
+  };
+
+  function BitReader(bytes) {
+    this.bytes = bytes;
+    this.pos = 0;
+  }
+  BitReader.prototype.read = function (width) {
+    let v = 0;
+    for (let i = 0; i < width; i++) {
+      const bi = this.pos++;
+      const byte = this.bytes[bi >> 3] || 0;
+      const bit = (byte >> (7 - (bi & 7))) & 1;
+      v = (v << 1) | bit;
+    }
+    return v;
+  };
+
+  function clipPrintText(value, maxChars) {
+    const chars = Array.from(String(value || "")).slice(0, maxChars);
+    let text = "";
+    const enc = new TextEncoder();
+    for (let i = 0; i < chars.length; i++) {
+      const next = text + chars[i];
+      if (enc.encode(next).length > 255) break;
+      text = next;
+    }
+    return text;
+  }
+
+  function splitPrintDex(dex) {
+    const s = String(dex == null ? "" : dex).replace(/#+$/, "");
+    const m = s.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) return { base: 0, form: 0 };
+    return {
+      base: Math.min(4095, parseInt(m[1], 10) || 0),
+      form: Math.min(31, parseInt(m[2] || "0", 10) || 0),
     };
-    return bytesToBase32(new TextEncoder().encode(JSON.stringify(body)));
+  }
+
+  function moveTokenToPrintId(token) {
+    if (!token || !DataService || !DataService.getMovePrintId) return 0;
+    const jp = DataService.parseJsonMoveName(token) || "";
+    const id = DataService.getMovePrintId(jp);
+    return id > 0 && id <= 1023 ? id : 0;
+  }
+
+  function writePrintString(w, text) {
+    const bytes = new TextEncoder().encode(text);
+    w.write(bytes.length, 8);
+    for (let i = 0; i < bytes.length; i++) w.write(bytes[i], 8);
+  }
+
+  function readPrintString(r) {
+    const len = r.read(8);
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = r.read(8);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function partyJsonToPrintBytes(json) {
+    const first = (v) => (Array.isArray(v) ? (v[0] || "") : "");
+    const w = new BitWriter();
+    w.write(1, 8);
+    writePrintString(w, clipPrintText(json && json.trainerName, 50));
+    writePrintString(w, clipPrintText(json && json.trainerId, 50));
+    writePrintString(w, String(json && json.friendCode != null ? json.friendCode : "").replace(/\D/g, "").slice(0, 32));
+    const mons = Array.isArray(json && json.pokemons) ? json.pokemons : [];
+    for (let i = 0; i < 6; i++) {
+      const mon = mons[i];
+      const dex = mon && typeof mon === "object" ? splitPrintDex(mon.dex) : { base: 0, form: 0 };
+      const cp = mon && mon.CP != null ? parseInt(mon.CP, 10) : 0;
+      w.write(dex.base, 12);
+      w.write(dex.form, 5);
+      w.write(Number.isFinite(cp) ? Math.max(0, Math.min(16383, cp)) : 0, 14);
+      w.write(mon && mon.shadow ? 1 : 0, 1);
+      w.write(mon && mon.light ? 1 : 0, 1);
+      w.write(mon ? moveTokenToPrintId(first(mon.fastMoves)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves1)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves2)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.thirdMoves)) : 0, 10);
+    }
+    return w.finish();
+  }
+
+  function partyJsonToPrintText(json) {
+    return bytesToBase32(partyJsonToPrintBytes(json));
   }
 
   function base32ToBytes(text) {
@@ -1269,8 +1354,65 @@
     return new Uint8Array(out);
   }
 
-  function printTextToSheetState(text) {
-    const body = JSON.parse(new TextDecoder().decode(base32ToBytes(text)));
+  function applyPrintMove(slot, field, id) {
+    if (!id || !DataService || !DataService.getMoveNameByPrintId) return;
+    const jp = DataService.getMoveNameByPrintId(id);
+    if (!jp) return;
+    if ((field === "charge1" || field === "charge2") && DataService.isThirdAttackName(jp)) return;
+    slot[field] = jp;
+  }
+
+  function printBinaryToSheetState(bytes) {
+    const r = new BitReader(bytes);
+    if (r.read(8) !== 1) return null;
+    const handleName = readPrintString(r);
+    const trainerName = readPrintString(r);
+    const friendCode = readPrintString(r).replace(/\D/g, "");
+    const pokemons = [];
+    for (let i = 0; i < 6; i++) {
+      const base = r.read(12);
+      const form = r.read(5);
+      const cp = r.read(14);
+      const shadow = r.read(1);
+      const light = r.read(1);
+      const fastId = r.read(10);
+      const c1Id = r.read(10);
+      const c2Id = r.read(10);
+      const thirdId = r.read(10);
+      const slot = emptyPokemons()[0];
+      const dexKey = base ? (form ? base + "-" + form : String(base)) : "";
+      const pm = dexKey && DataService ? DataService.getPokemonByDexNo(dexKey) : null;
+      if (pm) {
+        slot.dexNo = pm.dexNo;
+        slot.name = pm.name;
+        if (cp) slot.cp = String(cp);
+        slot.isShadow = !!shadow;
+        slot.isLight = !!light;
+        if (slot.isShadow && slot.isLight) slot.isLight = false;
+        const def = DataService.getDefaultMoves(pm);
+        slot.fast = def.fast || "";
+        slot.charge1 = def.charge1 || "";
+        slot.charge2 = def.charge2 || "";
+        slot.third = def.third || "";
+        applyPrintMove(slot, "fast", fastId);
+        applyPrintMove(slot, "charge1", c1Id);
+        applyPrintMove(slot, "charge2", c2Id);
+        applyPrintMove(slot, "third", thirdId);
+      }
+      pokemons.push(slot);
+    }
+    return {
+      handleName,
+      trainerName,
+      friendCode,
+      pokemons,
+      engOutput: false,
+      recognitionAttempted: false,
+    };
+  }
+
+  function printJsonToSheetState(bytes) {
+    const body = JSON.parse(new TextDecoder().decode(bytes));
     if (!body || typeof body !== "object" || !Array.isArray(body.p)) return null;
     const list = body.p;
     const pokemons = [];
@@ -1308,6 +1450,14 @@
       engOutput: false,
       recognitionAttempted: false,
     };
+  }
+
+  function printTextToSheetState(text) {
+    const bytes = base32ToBytes(text);
+    if (!bytes.length) return null;
+    if (bytes[0] === 1) return printBinaryToSheetState(bytes);
+    if (bytes[0] === 0x7b) return printJsonToSheetState(bytes);
+    return null;
   }
 
   function stopQrReadCamera() {
@@ -1571,7 +1721,7 @@
     try {
       payload = partyJsonToPrintText(slot.json);
       if (typeof qrcode !== "function") throw new Error("qrcode missing");
-      const qr = qrcode(0, "M");
+      const qr = qrcode(0, "Q");
       qr.addData(payload, "Alphanumeric");
       qr.make();
       qrUrl = qr.createDataURL(6, 4);

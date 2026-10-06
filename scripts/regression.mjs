@@ -1,0 +1,270 @@
+/**
+ * ローカル回帰テスト（Puppeteer + 静的HTTP）
+ * 実行: node scripts/regression.mjs
+ */
+import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import puppeteer from "puppeteer-core";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PORT = 8767;
+
+const EDGE_PATHS = [
+  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+];
+
+function mime(p) {
+  if (p.endsWith(".html")) return "text/html; charset=utf-8";
+  if (p.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (p.endsWith(".css")) return "text/css; charset=utf-8";
+  if (p.endsWith(".csv")) return "text/csv; charset=utf-8";
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".woff2")) return "font/woff2";
+  return "application/octet-stream";
+}
+
+function startServer() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+      let rel = urlPath === "/" ? "index.html" : urlPath.replace(/^\//, "");
+      rel = rel.split("/").join(path.sep);
+      const file = path.resolve(ROOT, rel);
+      if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+        res.writeHead(404);
+        res.end("not found");
+        return;
+      }
+      res.writeHead(200, { "Content-Type": mime(file) });
+      fs.createReadStream(file).pipe(res);
+    });
+    server.listen(PORT, "127.0.0.1", () => resolve(server));
+  });
+}
+
+function nodeCsvChecks() {
+  const failures = [];
+  const moveCsv = fs.readFileSync(path.join(ROOT, "Data/move_list.csv"), "utf8");
+  const rows = moveCsv.replace(/\uFEFF/g, "").trim().split(/\r?\n/).filter(Boolean);
+  const ids = [];
+  rows.forEach((line, i) => {
+    const cols = line.split(",");
+    if (cols.length < 5) failures.push(`move_list.csv 行${i + 1}: 5列未満`);
+    const id = parseInt(cols[4], 10);
+    if (!id || id < 1 || id > 1023) failures.push(`move_list.csv 行${i + 1}: printId 不正 (${cols[4]})`);
+    ids.push(id);
+  });
+  const uniq = new Set(ids);
+  if (uniq.size !== ids.length) failures.push("move_list.csv: printId 重複あり");
+  const movelist = fs.readFileSync(path.join(ROOT, "Data/poke_movelist.csv"), "utf8");
+  const thirdPlusInCharge = [];
+  movelist.split(/\r?\n/).forEach((line) => {
+    if (!line.trim()) return;
+    const [kind, dex, , ...moves] = line.split(",");
+    if (kind !== "1") return;
+    moves.forEach((m) => {
+      const n = m.replace(/＋/g, "+").trim();
+      if (/\+$/.test(n) && !n.startsWith("せいなるほのお") && !n.startsWith("エアロブラスト")) {
+        thirdPlusInCharge.push(`${dex}:${n}`);
+      }
+    });
+  });
+  if (thirdPlusInCharge.length) {
+    failures.push(`poke_movelist kind=1 に+技: ${thirdPlusInCharge.slice(0, 5).join(", ")}${thirdPlusInCharge.length > 5 ? "..." : ""}`);
+  }
+  return { moveRows: rows.length, failures };
+}
+
+function extractQrHelpersFromAppJs() {
+  const appJs = fs.readFileSync(path.join(ROOT, "js/app.js"), "utf8");
+  const emptyStart = appJs.indexOf("function emptyPokemons()");
+  const emptyEnd = appJs.indexOf("function showScreen(", emptyStart);
+  const qrStart = appJs.indexOf("function bytesToBase32(");
+  const qrEnd = appJs.indexOf("function stopQrReadCamera(");
+  if (emptyStart < 0 || qrStart < 0 || qrEnd < 0) throw new Error("app.js QR 抽出失敗");
+  return appJs.slice(emptyStart, emptyEnd) + "\n" + appJs.slice(qrStart, qrEnd);
+}
+
+async function main() {
+  const results = [];
+  const push = (name, ok, detail = "") => results.push({ name, ok, detail });
+
+  const csv = nodeCsvChecks();
+  push("CSV move_list 5列・printId", csv.failures.length === 0, csv.failures.join("; ") || `${csv.moveRows}行`);
+  push("CSV +技がkind=1にない", csv.failures.every((f) => !f.includes("kind=1")), csv.failures.find((f) => f.includes("kind=1")) || "OK");
+
+  const qrHelperSrc = extractQrHelpersFromAppJs();
+  const server = await startServer();
+  const edgePath = EDGE_PATHS.find((p) => fs.existsSync(p));
+  if (!edgePath) {
+    server.close();
+    throw new Error("Microsoft Edge が見つかりません");
+  }
+
+  const browser = await puppeteer.launch({
+    executablePath: edgePath,
+    headless: true,
+    args: ["--no-sandbox", "--disable-gpu"],
+  });
+
+  try {
+    const page = await browser.newPage();
+    page.on("pageerror", (e) => console.error("[pageerror]", e.message));
+    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "networkidle0", timeout: 120000 });
+    await page.waitForFunction(() => typeof DataService !== "undefined" && typeof CONFIG !== "undefined", { timeout: 60000 });
+
+    const browserTests = await page.evaluate(async (qrSrc) => {
+      const out = [];
+      const assert = (name, cond, detail = "") => out.push({ name, ok: !!cond, detail });
+
+      try {
+        await DataService.loadAll();
+      } catch (e) {
+        assert("DataService.loadAll", false, String(e));
+        return out;
+      }
+      assert("DataService.loadAll", true);
+
+      const v = CONFIG && CONFIG.appVersion;
+      assert("CONFIG.appVersion", v === "v3.0.7", v || "missing");
+
+      const cram = DataService.getMovesForPokemon("845");
+      const seal = DataService.getMovesForPokemon("364");
+      const hasPlus = (arr) => (arr || []).some((m) => /\+$/.test(String(m).replace(/＋/g, "+")));
+      assert("ウッウ chargeになみのり+なし", !hasPlus(cram.charge));
+      assert("トドグラー chargeになみのり+なし", !hasPlus(seal.charge));
+      assert("なみのり+ printId", DataService.getMovePrintId("なみのり+") === 242);
+      assert("Surf+ トークン解決", DataService.parseJsonMoveName("Surf+", "658-1") === "なみのり+");
+
+      const mega = DataService.getPokemonByDexNo("658-1");
+      const megaThird = DataService.getMovesForPokemon("658-1").third;
+      assert("メガゲッコウガ thirdになみのり+", megaThird.includes("なみのり+"));
+
+      assert("qrcode ライブラリ", typeof qrcode === "function");
+      assert("SheetRender", typeof SheetRender !== "undefined" && typeof SheetRender.drawSheet === "function");
+      assert("jsQR", typeof jsQR === "function");
+
+      assert("DOM 主要画面", !!document.getElementById("screen-top") && !!document.getElementById("screen-sheet"));
+      assert("DOM QRデバッグ", !!document.getElementById("overlay-qr-debug"));
+      assert("DOM スロットピッカー用クラスCSS", !!document.querySelector('link[href*="style.css"]'));
+
+      // QR codec（app.js から抽出した同一実装）
+      // eslint-disable-next-line no-eval
+      eval(qrSrc);
+
+      const sampleJson = {
+        trainerName: "テストトレーナー",
+        trainerId: "ハンドル名",
+        friendCode: "1234-5678-9012",
+        pokemons: [
+          {
+            dex: "658-1",
+            CP: 4200,
+            shadow: false,
+            light: false,
+            fastMoves: ["Water_Shuriken"],
+            chargedMoves1: ["Hydro_Pump"],
+            chargedMoves2: ["Dark_Pulse"],
+            thirdMoves: ["Surf+"],
+          },
+          { dex: "845", CP: 1500, shadow: true, light: false, fastMoves: ["Peck"], chargedMoves1: ["Surf"], chargedMoves2: ["Fly"], thirdMoves: [] },
+        ],
+      };
+
+      const payload = partyJsonToPrintText(sampleJson);
+      assert("QR binary payload 先頭バイト", payload.length > 20);
+      const decoded = printTextToSheetState(payload);
+      assert("QR binary 往復 decode", !!decoded);
+      assert("QR ハンドル名", decoded && decoded.handleName === sampleJson.trainerName);
+      assert("QR トレーナー名", decoded && decoded.trainerName === sampleJson.trainerId);
+      assert("QR フレンドコード", decoded && decoded.friendCode === "123456789012");
+      assert("QR 1匹目 CP", decoded && decoded.pokemons[0] && decoded.pokemons[0].cp === "4200");
+      assert("QR 1匹目 third", decoded && decoded.pokemons[0] && decoded.pokemons[0].third === "なみのり+");
+      assert("QR 2匹目 shadow", decoded && decoded.pokemons[1] && decoded.pokemons[1].isShadow === true);
+
+      if (typeof qrcode === "function" && payload) {
+        const qr = qrcode(0, "Q");
+        qr.addData(payload, "Alphanumeric");
+        qr.make();
+        const ver = (qr.getModuleCount() - 17) / 4;
+        assert("QR 生成 Version<=12", ver <= 12, `version=${ver}, len=${payload.length}`);
+      }
+
+      const legacyJson = JSON.stringify({
+        n: "旧形式",
+        t: "トレーナー",
+        f: "999988887777",
+        p: [["25", 2000, 0, 0, "Thunder_Shock", "Wild_Charge", "", ""]],
+      });
+      const legacyBytes = new TextEncoder().encode(legacyJson);
+      const legacyPayload = bytesToBase32(legacyBytes);
+      const legacyDecoded = printTextToSheetState(legacyPayload);
+      assert("QR legacy JSON decode", legacyDecoded && legacyDecoded.handleName === "旧形式");
+      assert("QR legacy ピカチュウ", legacyDecoded && legacyDecoded.pokemons[0] && legacyDecoded.pokemons[0].name === "ピカチュウ");
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1748;
+      canvas.height = 2480;
+      const sheetState = {
+        handleName: "回帰",
+        trainerName: "テスト",
+        friendCode: "111122223333",
+        engOutput: false,
+        pokemons: [
+          {
+            dexNo: "658-1",
+            name: mega ? mega.name : "メガゲッコウガ",
+            cp: "4000",
+            isShadow: false,
+            isLight: false,
+            fast: "みずしゅりけん",
+            charge1: "ハイドロポンプ",
+            charge2: "かみなりパンチ",
+            third: "なみのり+",
+          },
+          ...Array(5).fill(null).map(() => ({
+            dexNo: null,
+            name: null,
+            cp: "",
+            isShadow: false,
+            isLight: false,
+            fast: "",
+            charge1: "",
+            charge2: "",
+            third: "",
+          })),
+        ],
+      };
+      try {
+        await SheetRender.drawSheet(sheetState, canvas, false);
+        const px = canvas.getContext("2d").getImageData(100, 100, 1, 1).data;
+        assert("シート canvas 描画", canvas.width === 1748 && canvas.height === 2480 && (px[3] > 0 || px[0] + px[1] + px[2] > 0), `${canvas.width}x${canvas.height}`);
+      } catch (e) {
+        assert("シート canvas 描画", false, String(e));
+      }
+
+      return out;
+    }, qrHelperSrc);
+
+    browserTests.forEach((t) => push(t.name, t.ok, t.detail));
+  } finally {
+    await browser.close();
+    server.close();
+  }
+
+  const failed = results.filter((r) => !r.ok);
+  console.log("\n=== 回帰テスト結果 ===\n");
+  results.forEach((r) => {
+    console.log(`${r.ok ? "OK" : "FAIL"}  ${r.name}${r.detail ? " — " + r.detail : ""}`);
+  });
+  console.log(`\n合計: ${results.length} / 失敗: ${failed.length}\n`);
+  process.exit(failed.length ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

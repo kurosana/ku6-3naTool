@@ -80,6 +80,7 @@ const DataService = (function () {
       name: row[1],
       type: row[2],
       priority: parseInt(row[3], 10) || 99,
+      printId: parseInt(row[4], 10) || 0,
     }));
 
     const moveByName = {};
@@ -130,12 +131,17 @@ const DataService = (function () {
   // 大文字化 → 空白/ハイフンを _ に → 英数字とアンダースコア以外を除去
   function normalizeMoveToken(engName) {
     if (!engName) return "";
-    return String(engName)
+    const raw = String(engName);
+    const plus = (raw.match(/\++$/) || [""])[0];
+    const base = raw.slice(0, raw.length - plus.length);
+    const token = base
       .toUpperCase()
       .replace(/[\s\-]+/g, "_")
       .replace(/[^A-Z0-9_]/g, "")
       .replace(/_+/g, "_")
       .replace(/^_|_$/g, "");
+    if (!plus) return token;
+    return token + "_" + "PLUS".repeat(plus.length);
   }
 
   function getPokemonList() {
@@ -405,6 +411,21 @@ const DataService = (function () {
     return moveList.find((m) => m.name === moveName);
   }
 
+  /** 印刷QR用の技番号（move_list.csv 5列目、1始まり）。未採番は 0。 */
+  function getMovePrintId(jpName) {
+    if (!jpName) return 0;
+    const info = getMoveInfo(jpName);
+    const id = info && info.printId;
+    return id > 0 && id <= 1023 ? id : 0;
+  }
+
+  function getMoveNameByPrintId(id) {
+    const n = parseInt(id, 10);
+    if (!n) return "";
+    const info = moveList.find((m) => m.printId === n);
+    return info ? info.name : "";
+  }
+
   function getDefaultMoves(pokemon) {
     const dexNo = pokemon.dexNo;
     const customFast = (pokemon.defaultFast || "").trim();
@@ -549,6 +570,8 @@ const DataService = (function () {
     isThirdAttackName,
     searchMoves,
     getMoveInfo,
+    getMovePrintId,
+    getMoveNameByPrintId,
     getDefaultMoves,
     getTypeIconPath,
     getDisplayMoveName,
