@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.3", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.5", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -390,33 +390,45 @@ async function main() {
       const ir = img.getBoundingClientRect();
       const lr = lead.getBoundingClientRect();
       const zone = img.parentElement.getBoundingClientRect();
+      const resultBox = result.getBoundingClientRect();
+      const confirm = document.querySelector(".qr-read-confirm").getBoundingClientRect();
+      const btns = [...document.querySelectorAll(".qr-read-confirm-actions button")].map((b) => b.getBoundingClientRect());
       const leadStyle = getComputedStyle(lead);
+      const mid = (r) => (r.left + r.right) / 2;
+      const midY = (r) => (r.top + r.bottom) / 2;
       return {
         cols: getComputedStyle(result).gridTemplateColumns,
+        centered: Math.abs(mid(ir) - mid(zone)) < 12 && Math.abs(midY(ir) - midY(zone)) < 12,
+        imgFills: ir.height > zone.height * 0.75 && ir.width > 200,
+        zoneRatio: zone.width / resultBox.width,
         leadAfterImage: lr.left >= ir.right - 2,
-        imageInZone: ir.left >= zone.left - 1 && ir.right <= zone.right + 1,
+        leadCentered: Math.abs(midY(lr) - midY(confirm)) < confirm.height * 0.28,
         oneLine: leadStyle.whiteSpace === "nowrap" && lead.scrollWidth <= lead.clientWidth + 1,
-        actions: getComputedStyle(document.querySelector(".qr-read-confirm-actions")).flexDirection,
+        sideBySide: btns.length === 2 && btns[1].left >= btns[0].right - 1 && Math.abs(btns[0].top - btns[1].top) < 6,
         lead: lead.textContent,
         cancel: document.getElementById("btn-qr-print-cancel").className,
         print: document.getElementById("btn-qr-print").className,
       };
     });
-    push("横長はシートの右に確認", confirmWide.cols.split(" ").length === 2 && confirmWide.leadAfterImage && confirmWide.imageInZone && confirmWide.actions === "row" && confirmWide.oneLine, confirmWide.cols);
+    push("横長はシートの右に確認", confirmWide.cols.split(" ").length === 2 && confirmWide.centered && confirmWide.imgFills && confirmWide.zoneRatio > 0.55 && confirmWide.zoneRatio < 0.65 && confirmWide.leadAfterImage && confirmWide.leadCentered && confirmWide.sideBySide && confirmWide.oneLine, confirmWide.cols);
     push("印刷確認の文言とボタン", confirmWide.lead.indexOf("確認してください") >= 0 && confirmWide.cancel.indexOf("btn-secondary") >= 0 && confirmWide.print.indexOf("btn-primary") >= 0);
 
     await page.setViewport({ width: 390, height: 844 });
     const confirmPhone = await page.evaluate(() => {
       const result = document.getElementById("qr-read-result");
       const img = document.getElementById("qr-read-image").getBoundingClientRect();
+      const zone = document.querySelector(".qr-read-sheet-zone").getBoundingClientRect();
       const lead = document.querySelector(".qr-read-confirm-lead").getBoundingClientRect();
+      const btns = [...document.querySelectorAll(".qr-read-confirm-actions button")].map((b) => b.getBoundingClientRect());
+      const mid = (r) => (r.left + r.right) / 2;
       return {
         rows: getComputedStyle(result).gridTemplateRows,
         leadBelow: lead.top >= img.bottom - 2,
-        actions: getComputedStyle(document.querySelector(".qr-read-confirm-actions")).flexDirection,
+        centered: Math.abs(mid(img) - mid(zone)) < 12,
+        sideBySide: btns.length === 2 && btns[1].left >= btns[0].right - 1 && Math.abs(btns[0].top - btns[1].top) < 6,
       };
     });
-    push("縦画面は確認を下に並べる", confirmPhone.leadBelow && confirmPhone.actions === "row", confirmPhone.rows);
+    push("縦画面は確認を下に並べる", confirmPhone.leadBelow && confirmPhone.centered && confirmPhone.sideBySide, confirmPhone.rows);
 
     await page.setViewport({ width: 1400, height: 800 });
     const backToCamera = await page.evaluate(() => {

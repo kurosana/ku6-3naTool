@@ -5,7 +5,7 @@
 const CONFIG = {
   debugRecognition: 0,
 
-  appVersion: "v3.1.3",
+  appVersion: "v3.1.5",
   appReleaseNotes: "UI全面改修・保存スロット10件・対戦ログ・メガ風デザイン",
 
   // ユーザー向け変更履歴（新しいバージョンは先頭に追記）
