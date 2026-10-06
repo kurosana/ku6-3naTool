@@ -95,6 +95,27 @@
         <div id="version-changelog"></div>
         <div class="version-debug">
           <button type="button" class="btn-role btn-secondary" id="btn-qr-debug">QRデバッグ</button>
+          <button type="button" class="btn-role btn-secondary" id="btn-qr-read">QR読み取り</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- QR読み取り -->
+    <section id="screen-qr-read" class="screen">
+      <header class="page-header">
+        <button type="button" class="btn-role btn-secondary btn-back" id="btn-back-qr-read">戻る</button>
+        <h1 class="page-title">QR読み取り</h1>
+        <span class="page-header-spacer"></span>
+      </header>
+      <div class="qr-read-main screen-enter">
+        <div id="qr-read-camera">
+          <video id="qr-read-video" playsinline autoplay muted></video>
+          <p class="qr-read-note">QRをカメラに向けてください</p>
+          <p id="qr-read-error" class="qr-read-error" hidden></p>
+        </div>
+        <p id="qr-read-status" class="qr-read-note" hidden></p>
+        <div id="qr-read-result" hidden>
+          <img id="qr-read-image" alt="読み取ったパーティシート">
         </div>
       </div>
     </section>
@@ -420,6 +441,7 @@
   <script src="js/sheet-render.js"></script>
   <script src="js/anim.js"></script>
   <script src="js/qrcode.js"></script>
+  <script src="js/jsQR.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

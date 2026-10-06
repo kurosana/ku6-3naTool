@@ -16,6 +16,7 @@
     logList: $("screen-log-list"),
     logEdit: $("screen-log-edit"),
     version: $("screen-version"),
+    qrRead: $("screen-qr-read"),
   };
 
   let state = {
@@ -42,6 +43,12 @@
   let pendingSlotSaveIndex = null;
   let outputBlob = null;
   let outputBlobUrl = null;
+  let qrReadStream = null;
+  let qrReadRaf = 0;
+  let qrReadStop = false;
+  let qrReadBusy = false;
+  let qrReadDetector = null;
+  let qrReadBlobUrl = null;
 
   let currentSearchSlotIndex = null;
   let currentSearchContainerId = "pokemon-slots";
@@ -1243,6 +1250,257 @@
     return bytesToBase32(new TextEncoder().encode(JSON.stringify(body)));
   }
 
+  function base32ToBytes(text) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const clean = String(text || "").toUpperCase().replace(/=+$/g, "").replace(/[^A-Z2-7]/g, "");
+    let bits = 0;
+    let value = 0;
+    const out = [];
+    for (let i = 0; i < clean.length; i++) {
+      const idx = alphabet.indexOf(clean.charAt(i));
+      if (idx < 0) continue;
+      value = ((value << 5) | idx) & 0xffff;
+      bits += 5;
+      if (bits >= 8) {
+        bits -= 8;
+        out.push((value >>> bits) & 0xff);
+      }
+    }
+    return new Uint8Array(out);
+  }
+
+  function printTextToSheetState(text) {
+    const body = JSON.parse(new TextDecoder().decode(base32ToBytes(text)));
+    if (!body || typeof body !== "object" || !Array.isArray(body.p)) return null;
+    const list = body.p;
+    const pokemons = [];
+    for (let i = 0; i < 6; i++) {
+      const row = list[i];
+      const slot = emptyPokemons()[0];
+      if (Array.isArray(row) && DataService) {
+        const pm = row[0] != null ? DataService.getPokemonByDexNo(String(row[0])) : null;
+        if (pm) {
+          slot.dexNo = pm.dexNo;
+          slot.name = pm.name;
+          const cp = parseInt(row[1], 10);
+          if (Number.isFinite(cp)) slot.cp = String(cp);
+          slot.isShadow = !!row[2];
+          slot.isLight = !!row[3];
+          if (slot.isShadow && slot.isLight) slot.isLight = false;
+          const def = DataService.getDefaultMoves(pm);
+          const fastJp = DataService.parseJsonMoveName(row[4] || "", pm.dexNo);
+          const c1Jp = DataService.parseJsonMoveName(row[5] || "", pm.dexNo);
+          const c2Jp = DataService.parseJsonMoveName(row[6] || "", pm.dexNo);
+          const t3Jp = DataService.parseJsonMoveName(row[7] || "", pm.dexNo);
+          slot.fast = fastJp || def.fast || "";
+          slot.charge1 = DataService.isThirdAttackName(c1Jp) ? (def.charge1 || "") : (c1Jp || def.charge1 || "");
+          slot.charge2 = DataService.isThirdAttackName(c2Jp) ? (def.charge2 || "") : (c2Jp || def.charge2 || "");
+          slot.third = t3Jp || def.third || "";
+        }
+      }
+      pokemons.push(slot);
+    }
+    return {
+      handleName: typeof body.n === "string" ? body.n : "",
+      trainerName: typeof body.t === "string" ? body.t : "",
+      friendCode: body.f != null ? String(body.f).replace(/\D/g, "") : "",
+      pokemons,
+      engOutput: false,
+      recognitionAttempted: false,
+    };
+  }
+
+  function stopQrReadCamera() {
+    qrReadStop = true;
+    qrReadBusy = false;
+    if (qrReadRaf) cancelAnimationFrame(qrReadRaf);
+    qrReadRaf = 0;
+    if (qrReadStream) {
+      qrReadStream.getTracks().forEach((track) => track.stop());
+      qrReadStream = null;
+    }
+    const video = $("qr-read-video");
+    if (video) video.srcObject = null;
+  }
+
+  function resetQrReadView() {
+    const camera = $("qr-read-camera");
+    const result = $("qr-read-result");
+    const status = $("qr-read-status");
+    const error = $("qr-read-error");
+    const img = $("qr-read-image");
+    if (camera) camera.hidden = false;
+    if (result) result.hidden = true;
+    if (status) { status.hidden = true; status.textContent = ""; }
+    if (error) { error.hidden = true; error.textContent = ""; }
+    if (img) img.removeAttribute("src");
+    if (qrReadBlobUrl) {
+      URL.revokeObjectURL(qrReadBlobUrl);
+      qrReadBlobUrl = null;
+    }
+  }
+
+  function leaveQrRead() {
+    stopQrReadCamera();
+    hideProgress();
+    resetQrReadView();
+    showScreen("version");
+  }
+
+  async function createQrDetector() {
+    if (typeof BarcodeDetector !== "function") return null;
+    try {
+      if (typeof BarcodeDetector.getSupportedFormats === "function") {
+        const formats = await BarcodeDetector.getSupportedFormats();
+        if (!formats || formats.indexOf("qr_code") < 0) return null;
+      }
+      return new BarcodeDetector({ formats: ["qr_code"] });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function openQrReadCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("camera unavailable");
+    }
+    const attempts = [
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: true, audio: false },
+    ];
+    let lastError = null;
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(attempts[i]);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error("camera unavailable");
+  }
+
+  async function readQrFromVideo(video, canvas, ctx) {
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return "";
+    const maxW = 1280;
+    const scale = w > maxW ? maxW / w : 1;
+    const cw = Math.max(1, Math.round(w * scale));
+    const ch = Math.max(1, Math.round(h * scale));
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
+    ctx.drawImage(video, 0, 0, cw, ch);
+    if (qrReadDetector) {
+      try {
+        const codes = await qrReadDetector.detect(canvas);
+        if (codes && codes.length && codes[0].rawValue) return String(codes[0].rawValue);
+      } catch (_) {
+        qrReadDetector = null;
+      }
+    }
+    if (typeof jsQR === "function") {
+      const image = ctx.getImageData(0, 0, cw, ch);
+      const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" });
+      if (code && code.data) return String(code.data);
+    }
+    return "";
+  }
+
+  async function showQrReadSheet(text) {
+    let sheetState = null;
+    try {
+      sheetState = printTextToSheetState(text);
+    } catch (_) {
+      sheetState = null;
+    }
+    if (!sheetState) return false;
+    stopQrReadCamera();
+    const camera = $("qr-read-camera");
+    const status = $("qr-read-status");
+    const result = $("qr-read-result");
+    if (camera) camera.hidden = true;
+    if (status) {
+      status.hidden = false;
+      status.textContent = "シートを作成しています";
+    }
+    showProgress();
+    try {
+      await document.fonts.ready;
+      const blob = await SheetRender.renderToBlob(sheetState, setProgress);
+      if (qrReadBlobUrl) URL.revokeObjectURL(qrReadBlobUrl);
+      qrReadBlobUrl = URL.createObjectURL(blob);
+      const img = $("qr-read-image");
+      if (img) img.src = qrReadBlobUrl;
+      if (result) result.hidden = false;
+      if (status) status.hidden = true;
+    } catch (e) {
+      console.error("[QR読み取り]", e);
+      if (status) {
+        status.hidden = false;
+        status.textContent = "シートを作れませんでした";
+      }
+    } finally {
+      hideProgress();
+    }
+    return true;
+  }
+
+  async function startQrRead() {
+    stopQrReadCamera();
+    resetQrReadView();
+    showScreen("qrRead");
+    const error = $("qr-read-error");
+    const video = $("qr-read-video");
+    qrReadStop = false;
+    qrReadDetector = await createQrDetector();
+    try {
+      qrReadStream = await openQrReadCamera();
+    } catch (e) {
+      console.error("[QR読み取り]", e);
+      if (error) {
+        error.hidden = false;
+        error.textContent = "カメラを起動できませんでした";
+      }
+      return;
+    }
+    if (!video) return;
+    video.srcObject = qrReadStream;
+    try {
+      await video.play();
+    } catch (_) {}
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const scanFrame = async () => {
+      if (qrReadStop) return;
+      if (qrReadBusy || video.readyState < 2) {
+        qrReadRaf = requestAnimationFrame(scanFrame);
+        return;
+      }
+      qrReadBusy = true;
+      let text = "";
+      try {
+        text = await readQrFromVideo(video, canvas, ctx);
+      } catch (_) {
+        text = "";
+      }
+      qrReadBusy = false;
+      if (qrReadStop) return;
+      if (text) {
+        qrReadStop = true;
+        const ok = await showQrReadSheet(text);
+        if (!ok && !qrReadStop) {
+          qrReadRaf = requestAnimationFrame(scanFrame);
+        } else if (!ok) {
+          qrReadStop = false;
+          qrReadRaf = requestAnimationFrame(scanFrame);
+        }
+        return;
+      }
+      qrReadRaf = requestAnimationFrame(scanFrame);
+    };
+    qrReadRaf = requestAnimationFrame(scanFrame);
+  }
+
   function openQrDebug() {
     const overlay = $("overlay-qr-debug");
     if (!overlay) return;
@@ -1327,7 +1585,7 @@
       return;
     }
     body.innerHTML = `
-      <p class="qr-debug-note">Macではテキストエディットを前面にして、このQRを読み取ってください。出た文字が下の列と全部一致すれば成功です。</p>
+      <p class="qr-debug-note">別の端末で「QR読み取り」を開き、このQRをカメラに向けてください。</p>
       <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="保存データのQR"></div>
       <p class="qr-debug-meta">${payload.length}文字 / バージョン${escapeHtml(version)}</p>
       <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
@@ -1411,6 +1669,8 @@
     $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
     $("btn-qr-debug").addEventListener("click", openQrDebug);
+    $("btn-qr-read").addEventListener("click", startQrRead);
+    $("btn-back-qr-read").addEventListener("click", leaveQrRead);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
     $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
     $("btn-qr-debug-back").addEventListener("click", renderQrDebugList);
