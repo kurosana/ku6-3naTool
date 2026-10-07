@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.13", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.15", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -432,6 +432,19 @@ async function main() {
     push("縦画面は確認を下に並べる", confirmPhone.leadBelow && confirmPhone.centered && confirmPhone.sideBySide, confirmPhone.rows);
 
     await page.setViewport({ width: 1400, height: 800 });
+    const backFromSheet = await page.evaluate(() => {
+      document.getElementById("qr-read-camera").hidden = true;
+      document.getElementById("qr-read-result").hidden = false;
+      document.getElementById("btn-back-qr-read").click();
+      return {
+        camera: !document.getElementById("qr-read-camera").hidden,
+        result: document.getElementById("qr-read-result").hidden,
+        qr: document.getElementById("screen-qr-read").classList.contains("active"),
+        version: document.getElementById("screen-version").classList.contains("active"),
+      };
+    });
+    push("確認画面の戻るはカメラへ", backFromSheet.camera && backFromSheet.result && backFromSheet.qr && !backFromSheet.version, JSON.stringify(backFromSheet));
+
     const backToCamera = await page.evaluate(async () => {
       const output = document.getElementById("overlay-output");
       const qr = document.getElementById("overlay-qr-debug");

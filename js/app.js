@@ -50,7 +50,7 @@
   let qrReadDetector = null;
   let qrReadBlobUrl = null;
   let qrReadFrame = 0;
-  let qrPrintBusy = false;
+  let qrReadToken = 0;
   let qrNativeFails = 0;
   let qrGuideOnResize = null;
   let qrReadDiag = emptyQrReadDiag();
@@ -1603,6 +1603,15 @@
     showScreen("version");
   }
 
+  function backFromQrRead() {
+    const result = $("qr-read-result");
+    if (result && !result.hidden) {
+      cancelQrPrint();
+      return;
+    }
+    leaveQrRead();
+  }
+
   async function createQrDetector() {
     if (typeof BarcodeDetector !== "function") return null;
     try {
@@ -1765,7 +1774,6 @@
   }
 
   function cancelQrPrint() {
-    if (qrPrintBusy) return;
     startQrRead();
   }
 
@@ -1840,27 +1848,33 @@
   }
 
   function printQrSheet() {
-    if (qrPrintBusy) return;
     const img = $("qr-read-image");
     const src = img && img.getAttribute("src");
     if (!src) return;
-    qrPrintBusy = true;
+    const token = qrReadToken;
     const frame = document.createElement("iframe");
     frame.setAttribute("title", "パーティシート印刷");
     frame.setAttribute("aria-hidden", "true");
-    frame.style.cssText = "position:fixed;left:-10000px;top:0;width:148mm;height:210mm;border:0;";
+    frame.style.cssText = "position:fixed;left:-10000px;top:0;width:148mm;height:210mm;border:0;pointer-events:none;";
     document.body.appendChild(frame);
     let pdfUrl = "";
     let finished = false;
     let started = false;
+    const cleanupFrame = () => {
+      frame.remove();
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      pdfUrl = "";
+    };
     const finish = () => {
       if (finished) return;
       finished = true;
-      qrPrintBusy = false;
       window.removeEventListener("afterprint", finish);
-      frame.remove();
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      if (token !== qrReadToken) {
+        cleanupFrame();
+        return;
+      }
       startQrRead();
+      setTimeout(cleanupFrame, 2000);
     };
     const kick = () => {
       if (started || finished) return;
@@ -1870,6 +1884,7 @@
         win.addEventListener("afterprint", finish);
         win.focus();
         win.print();
+        setTimeout(finish, 400);
       } catch (e) {
         console.error("[印刷]", e);
         finish();
@@ -1877,7 +1892,10 @@
     };
     window.addEventListener("afterprint", finish);
     sheetImageToPdf(src).then((pdf) => {
-      if (finished) return;
+      if (finished || token !== qrReadToken) {
+        cleanupFrame();
+        return;
+      }
       pdfUrl = URL.createObjectURL(pdf);
       frame.onload = () => setTimeout(kick, 300);
       frame.src = pdfUrl;
@@ -1889,6 +1907,7 @@
   }
 
   async function startQrRead() {
+    qrReadToken++;
     stopQrReadCamera();
     resetQrReadView();
     showScreen("qrRead");
@@ -2069,7 +2088,7 @@
     $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
     $("btn-qr-read").addEventListener("click", startQrRead);
-    $("btn-back-qr-read").addEventListener("click", leaveQrRead);
+    $("btn-back-qr-read").addEventListener("click", backFromQrRead);
     $("btn-qr-print-cancel").addEventListener("click", cancelQrPrint);
     $("btn-qr-print").addEventListener("click", printQrSheet);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
