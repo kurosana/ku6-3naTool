@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.12", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.13", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -443,34 +443,32 @@ async function main() {
       }
       document.getElementById("qr-read-camera").hidden = true;
       document.getElementById("qr-read-result").hidden = false;
-      window.open = () => {
-        const fake = {
-          closed: false,
-          focus() {},
-          close() { this.closed = true; },
-          addEventListener(type, fn) { this["on" + type] = fn; },
-          removeEventListener() {},
-          print() {
-            const href = this.location.href;
-            fetch(href).then((res) => res.arrayBuffer()).then((buf) => {
-              const bytes = new Uint8Array(buf);
-              const text = new TextDecoder("latin1").decode(bytes);
-              window.__sheetPrint = {
-                pdf: text.startsWith("%PDF"),
-                pages: (text.match(/\/Type \/Page(?!s)/g) || []).length,
-                count: /\/Count 1/.test(text),
-                media: (text.match(/\/MediaBox \[0 0 ([0-9.]+) ([0-9.]+)\]/) || []).slice(1),
+      let opened = false;
+      window.open = () => { opened = true; return null; };
+      const append = document.body.appendChild.bind(document.body);
+      document.body.appendChild = function (node) {
+        const added = append(node);
+        if (node && node.tagName === "IFRAME") {
+          const arm = () => {
+            try {
+              node.contentWindow.print = () => {
+                fetch(node.src).then((res) => res.arrayBuffer()).then((buf) => {
+                  const text = new TextDecoder("latin1").decode(new Uint8Array(buf));
+                  window.__sheetPrint = {
+                    pdf: text.startsWith("%PDF"),
+                    pages: (text.match(/\/Type \/Page(?!s)/g) || []).length,
+                    count: /\/Count 1/.test(text),
+                    media: (text.match(/\/MediaBox \[0 0 ([0-9.]+) ([0-9.]+)\]/) || []).slice(1),
+                  };
+                  node.contentWindow.dispatchEvent(new Event("afterprint"));
+                });
               };
-              if (this.onafterprint) this.onafterprint();
-            });
-          },
-        };
-        fake.location = {
-          _href: "",
-          set href(v) { fake.location._href = String(v); },
-          get href() { return fake.location._href; },
-        };
-        return fake;
+            } catch (_) {}
+          };
+          arm();
+          node.addEventListener("load", arm, true);
+        }
+        return added;
       };
       document.getElementById("btn-qr-print").click();
       const start = Date.now();
@@ -486,7 +484,7 @@ async function main() {
         camera: !document.getElementById("qr-read-camera").hidden,
         result: document.getElementById("qr-read-result").hidden,
         printing: document.body.classList.contains("sheet-print"),
-        imageOnly: !!(printed.pdf && printed.pages === 1 && printed.count && printed.media[0] === "419.53" && printed.media[1] === "595.28"),
+        imageOnly: !opened && !!(printed.pdf && printed.pages === 1 && printed.count && printed.media[0] === "419.53" && printed.media[1] === "595.28"),
       };
     });
     push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing && backToCamera.imageOnly, JSON.stringify(backToCamera));

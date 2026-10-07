@@ -1844,38 +1844,44 @@
     const img = $("qr-read-image");
     const src = img && img.getAttribute("src");
     if (!src) return;
-    const popup = window.open("", "_blank");
-    if (!popup) return;
     qrPrintBusy = true;
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "パーティシート印刷");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;left:-10000px;top:0;width:148mm;height:210mm;border:0;";
+    document.body.appendChild(frame);
     let pdfUrl = "";
     let finished = false;
+    let started = false;
     const finish = () => {
       if (finished) return;
       finished = true;
       qrPrintBusy = false;
-      clearInterval(watch);
-      try { popup.removeEventListener("afterprint", finish); } catch (_) {}
-      try { popup.close(); } catch (_) {}
+      window.removeEventListener("afterprint", finish);
+      frame.remove();
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       startQrRead();
     };
-    const watch = setInterval(() => {
-      if (popup.closed) finish();
-    }, 400);
     const kick = () => {
+      if (started || finished) return;
+      started = true;
       try {
-        popup.addEventListener("afterprint", finish);
-        popup.focus();
-        popup.print();
+        const win = frame.contentWindow;
+        win.addEventListener("afterprint", finish);
+        win.focus();
+        win.print();
       } catch (e) {
         console.error("[印刷]", e);
+        finish();
       }
     };
+    window.addEventListener("afterprint", finish);
     sheetImageToPdf(src).then((pdf) => {
-      if (finished || popup.closed) return;
+      if (finished) return;
       pdfUrl = URL.createObjectURL(pdf);
-      popup.location.href = pdfUrl;
-      setTimeout(kick, 500);
+      frame.onload = () => setTimeout(kick, 300);
+      frame.src = pdfUrl;
+      setTimeout(kick, 1500);
     }).catch((e) => {
       console.error("[印刷]", e);
       finish();
