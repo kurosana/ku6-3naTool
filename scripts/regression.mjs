@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.11", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.12", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -444,28 +444,41 @@ async function main() {
       document.getElementById("qr-read-camera").hidden = true;
       document.getElementById("qr-read-result").hidden = false;
       window.open = () => {
-        const frame = document.createElement("iframe");
-        document.body.appendChild(frame);
-        const win = frame.contentWindow;
-        win.close = () => frame.remove();
-        win.print = () => {
-          const doc = win.document;
-          const printed = doc.querySelector("img");
-          const style = doc.querySelector("style");
-          window.__sheetPrint = {
-            imgs: doc.querySelectorAll("img").length,
-            extraText: (doc.body.innerText || "").replace(/\s/g, ""),
-            style: style ? style.textContent : "",
-            src: printed ? printed.getAttribute("src") : "",
-            title: doc.title,
-          };
-          win.dispatchEvent(new Event("afterprint"));
+        const fake = {
+          closed: false,
+          focus() {},
+          close() { this.closed = true; },
+          addEventListener(type, fn) { this["on" + type] = fn; },
+          removeEventListener() {},
+          print() {
+            const href = this.location.href;
+            fetch(href).then((res) => res.arrayBuffer()).then((buf) => {
+              const bytes = new Uint8Array(buf);
+              const text = new TextDecoder("latin1").decode(bytes);
+              window.__sheetPrint = {
+                pdf: text.startsWith("%PDF"),
+                pages: (text.match(/\/Type \/Page(?!s)/g) || []).length,
+                count: /\/Count 1/.test(text),
+                media: (text.match(/\/MediaBox \[0 0 ([0-9.]+) ([0-9.]+)\]/) || []).slice(1),
+              };
+              if (this.onafterprint) this.onafterprint();
+            });
+          },
         };
-        return win;
+        fake.location = {
+          _href: "",
+          set href(v) { fake.location._href = String(v); },
+          get href() { return fake.location._href; },
+        };
+        return fake;
       };
       document.getElementById("btn-qr-print").click();
       const start = Date.now();
-      while (document.getElementById("qr-read-camera").hidden && Date.now() - start < 3000) {
+      while (!window.__sheetPrint && Date.now() - start < 20000) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      const startBack = Date.now();
+      while (document.getElementById("qr-read-camera").hidden && Date.now() - startBack < 3000) {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
       const printed = window.__sheetPrint || {};
@@ -473,7 +486,7 @@ async function main() {
         camera: !document.getElementById("qr-read-camera").hidden,
         result: document.getElementById("qr-read-result").hidden,
         printing: document.body.classList.contains("sheet-print"),
-        imageOnly: printed.imgs === 1 && printed.title === "パーティシート" && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && printed.style.indexOf("object-fit:contain") >= 0 && printed.style.indexOf("object-position:center top") >= 0 && !!printed.src,
+        imageOnly: !!(printed.pdf && printed.pages === 1 && printed.count && printed.media[0] === "419.53" && printed.media[1] === "595.28"),
       };
     });
     push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing && backToCamera.imageOnly, JSON.stringify(backToCamera));

@@ -1769,57 +1769,117 @@
     startQrRead();
   }
 
+  function pdfNum(n) {
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  async function sheetImageToPdf(src) {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    const w = image.naturalWidth;
+    const h = image.naturalHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, w, h).data;
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
+      rgb[j] = pixels[i];
+      rgb[j + 1] = pixels[i + 1];
+      rgb[j + 2] = pixels[i + 2];
+    }
+    const deflated = new Blob([rgb]).stream().pipeThrough(new CompressionStream("deflate"));
+    const compressed = new Uint8Array(await new Response(deflated).arrayBuffer());
+    const pageW = 148 * 72 / 25.4;
+    const pageH = 210 * 72 / 25.4;
+    const content = "q\n" + pdfNum(pageW) + " 0 0 " + pdfNum(pageH) + " 0 0 cm\n/Im0 Do\nQ\n";
+    const enc = new TextEncoder();
+    const chunks = [];
+    let len = 0;
+    const offsets = [0];
+    const addBytes = (bytes) => {
+      chunks.push(bytes);
+      len += bytes.length;
+    };
+    const addStr = (text) => addBytes(enc.encode(text));
+    const startObj = (n) => {
+      offsets[n] = len;
+      addStr(n + " 0 obj\n");
+    };
+    const endObj = () => addStr("\nendobj\n");
+    addStr("%PDF-1.4\n");
+    startObj(1);
+    addStr("<< /Type /Catalog /Pages 2 0 R >>");
+    endObj();
+    startObj(2);
+    addStr("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    endObj();
+    startObj(3);
+    addStr("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pdfNum(pageW) + " " + pdfNum(pageH) + "] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>");
+    endObj();
+    startObj(4);
+    addStr("<< /Length " + enc.encode(content).length + " >>\nstream\n");
+    addStr(content);
+    addStr("\nendstream");
+    endObj();
+    startObj(5);
+    addStr("<< /Type /XObject /Subtype /Image /Width " + w + " /Height " + h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length " + compressed.length + " >>\nstream\n");
+    addBytes(compressed);
+    addStr("\nendstream");
+    endObj();
+    const xrefAt = len;
+    addStr("xref\n0 6\n0000000000 65535 f \n");
+    for (let n = 1; n <= 5; n++) addStr(String(offsets[n]).padStart(10, "0") + " 00000 n \n");
+    addStr("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF");
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
   function printQrSheet() {
     if (qrPrintBusy) return;
     const img = $("qr-read-image");
     const src = img && img.getAttribute("src");
     if (!src) return;
-    qrPrintBusy = true;
     const popup = window.open("", "_blank");
-    let frame = null;
-    let win = popup;
-    let doc = popup && popup.document;
-    if (!doc) {
-      frame = document.createElement("iframe");
-      frame.setAttribute("title", "パーティシート印刷");
-      frame.style.cssText = "position:fixed;left:0;top:0;width:148mm;height:210mm;border:0;";
-      document.body.appendChild(frame);
-      win = frame.contentWindow;
-      doc = frame.contentDocument;
-    }
-    doc.open();
-    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;background:#fff;overflow:hidden}img{display:block;width:148mm;height:209.5mm;object-fit:contain;object-position:center top}</style></head><body></body></html>");
-    doc.close();
-    const printed = doc.createElement("img");
-    printed.alt = "パーティシート";
-    doc.body.appendChild(printed);
+    if (!popup) return;
+    qrPrintBusy = true;
+    let pdfUrl = "";
     let finished = false;
-    let started = false;
     const finish = () => {
       if (finished) return;
       finished = true;
       qrPrintBusy = false;
-      win.removeEventListener("afterprint", finish);
-      if (frame) frame.remove();
-      else win.close();
+      clearInterval(watch);
+      try { popup.removeEventListener("afterprint", finish); } catch (_) {}
+      try { popup.close(); } catch (_) {}
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
       startQrRead();
     };
-    const go = () => {
-      if (started) return;
-      started = true;
+    const watch = setInterval(() => {
+      if (popup.closed) finish();
+    }, 400);
+    const kick = () => {
       try {
-        win.focus();
-        win.print();
+        popup.addEventListener("afterprint", finish);
+        popup.focus();
+        popup.print();
       } catch (e) {
         console.error("[印刷]", e);
-        finish();
       }
     };
-    win.addEventListener("afterprint", finish);
-    printed.onload = go;
-    printed.onerror = finish;
-    printed.src = src;
-    if (printed.complete && printed.naturalWidth) go();
+    sheetImageToPdf(src).then((pdf) => {
+      if (finished || popup.closed) return;
+      pdfUrl = URL.createObjectURL(pdf);
+      popup.location.href = pdfUrl;
+      setTimeout(kick, 500);
+    }).catch((e) => {
+      console.error("[印刷]", e);
+      finish();
+    });
   }
 
   async function startQrRead() {
