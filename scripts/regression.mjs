@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.10", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.11", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -443,24 +443,25 @@ async function main() {
       }
       document.getElementById("qr-read-camera").hidden = true;
       document.getElementById("qr-read-result").hidden = false;
-      const append = document.body.appendChild.bind(document.body);
-      document.body.appendChild = function (node) {
-        const added = append(node);
-        if (node && node.tagName === "IFRAME" && node.contentWindow) {
-          node.contentWindow.print = () => {
-            const doc = node.contentDocument;
-            const printed = doc.querySelector("img");
-            const style = doc.querySelector("style");
-            window.__sheetPrint = {
-              imgs: doc.querySelectorAll("img").length,
-              extraText: (doc.body.innerText || "").replace(/\s/g, ""),
-              style: style ? style.textContent : "",
-              src: printed ? printed.getAttribute("src") : "",
-            };
-            node.contentWindow.dispatchEvent(new Event("afterprint"));
+      window.open = () => {
+        const frame = document.createElement("iframe");
+        document.body.appendChild(frame);
+        const win = frame.contentWindow;
+        win.close = () => frame.remove();
+        win.print = () => {
+          const doc = win.document;
+          const printed = doc.querySelector("img");
+          const style = doc.querySelector("style");
+          window.__sheetPrint = {
+            imgs: doc.querySelectorAll("img").length,
+            extraText: (doc.body.innerText || "").replace(/\s/g, ""),
+            style: style ? style.textContent : "",
+            src: printed ? printed.getAttribute("src") : "",
+            title: doc.title,
           };
-        }
-        return added;
+          win.dispatchEvent(new Event("afterprint"));
+        };
+        return win;
       };
       document.getElementById("btn-qr-print").click();
       const start = Date.now();
@@ -472,7 +473,7 @@ async function main() {
         camera: !document.getElementById("qr-read-camera").hidden,
         result: document.getElementById("qr-read-result").hidden,
         printing: document.body.classList.contains("sheet-print"),
-        imageOnly: printed.imgs === 1 && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && printed.style.indexOf("overflow:hidden") >= 0 && printed.style.indexOf("height:calc(210mm - 1px)") >= 0 && printed.style.indexOf("height:100%") >= 0 && !!printed.src,
+        imageOnly: printed.imgs === 1 && printed.title === "パーティシート" && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && printed.style.indexOf("object-fit:contain") >= 0 && printed.style.indexOf("object-position:center top") >= 0 && !!printed.src,
       };
     });
     push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing && backToCamera.imageOnly, JSON.stringify(backToCamera));

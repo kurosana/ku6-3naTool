@@ -1775,14 +1775,20 @@
     const src = img && img.getAttribute("src");
     if (!src) return;
     qrPrintBusy = true;
-    const frame = document.createElement("iframe");
-    frame.setAttribute("title", "パーティシート印刷");
-    frame.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;border:0;";
-    document.body.appendChild(frame);
-    const doc = frame.contentDocument;
-    const win = frame.contentWindow;
+    const popup = window.open("", "_blank");
+    let frame = null;
+    let win = popup;
+    let doc = popup && popup.document;
+    if (!doc) {
+      frame = document.createElement("iframe");
+      frame.setAttribute("title", "パーティシート印刷");
+      frame.style.cssText = "position:fixed;left:0;top:0;width:148mm;height:210mm;border:0;";
+      document.body.appendChild(frame);
+      win = frame.contentWindow;
+      doc = frame.contentDocument;
+    }
     doc.open();
-    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;width:148mm;height:calc(210mm - 1px);overflow:hidden;background:#fff}img{display:block;width:148mm;height:100%;object-fit:fill;break-after:avoid;page-break-after:avoid}</style></head><body></body></html>");
+    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;background:#fff;overflow:hidden}img{display:block;width:148mm;height:209.5mm;object-fit:contain;object-position:center top}</style></head><body></body></html>");
     doc.close();
     const printed = doc.createElement("img");
     printed.alt = "パーティシート";
@@ -1794,7 +1800,8 @@
       finished = true;
       qrPrintBusy = false;
       win.removeEventListener("afterprint", finish);
-      frame.remove();
+      if (frame) frame.remove();
+      else win.close();
       startQrRead();
     };
     const go = () => {
