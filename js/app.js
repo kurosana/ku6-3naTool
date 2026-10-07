@@ -1782,7 +1782,7 @@
     const doc = frame.contentDocument;
     const win = frame.contentWindow;
     doc.open();
-    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;background:#fff}img{display:block;width:148mm;height:210mm;object-fit:fill}</style></head><body></body></html>");
+    doc.write("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>パーティシート</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0;padding:0;width:148mm;height:calc(210mm - 1px);overflow:hidden;background:#fff}img{display:block;width:148mm;height:100%;object-fit:fill;break-after:avoid;page-break-after:avoid}</style></head><body></body></html>");
     doc.close();
     const printed = doc.createElement("img");
     printed.alt = "パーティシート";

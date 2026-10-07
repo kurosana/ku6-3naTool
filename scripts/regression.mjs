@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.7", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.10", v || "missing");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");
@@ -472,7 +472,7 @@ async function main() {
         camera: !document.getElementById("qr-read-camera").hidden,
         result: document.getElementById("qr-read-result").hidden,
         printing: document.body.classList.contains("sheet-print"),
-        imageOnly: printed.imgs === 1 && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && !!printed.src,
+        imageOnly: printed.imgs === 1 && !printed.extraText && printed.style.indexOf("A5 portrait") >= 0 && printed.style.indexOf("margin:0") >= 0 && printed.style.indexOf("overflow:hidden") >= 0 && printed.style.indexOf("height:calc(210mm - 1px)") >= 0 && printed.style.indexOf("height:100%") >= 0 && !!printed.src,
       };
     });
     push("印刷後に読み取りへ戻る", backToCamera.camera && backToCamera.result && !backToCamera.printing && backToCamera.imageOnly, JSON.stringify(backToCamera));
