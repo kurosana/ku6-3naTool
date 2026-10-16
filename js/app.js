@@ -20,7 +20,7 @@
   }
   function shownMon(name) {
     if (!name) return name;
-    if (uiEn() && DataService && DataService.getPokemonEngName) return DataService.getPokemonEngName(name);
+    if (uiEn() && DataService && DataService.getPokemonUiEnName) return DataService.getPokemonUiEnName(name);
     return name;
   }
   function formatWhen(at) {

@@ -18,6 +18,7 @@ const DataService = (function () {
   let pokeMovelist = [];
   let typeMap = {};
   let pokemonEngMap = {}; // 日本語名 → 英語名
+  let pokemonUiEnName = {}; // 表示用。種族名だけ英語、フォルム表記は日本語のまま
   let moveEngMap = {};    // 日本語名 → 英語名
   let pokemonEngToJpMap = {}; // 英語名（lower） → 日本語名
   let moveEngToJpMap = {};    // 正規化トークン（FEINT_ATTACK） → 日本語名
@@ -114,6 +115,8 @@ const DataService = (function () {
         pokemonEngToJpMap[en.toLowerCase()] = jp;
       }
     });
+    buildPokemonUiEnNames();
+
     parseCSV(moveEngCsv).slice(1).forEach((row) => {
       if (row[0] && row[1]) {
         const jp = row[0].trim();
@@ -335,7 +338,7 @@ const DataService = (function () {
       if (qKana && name.includes(qKana)) return true;
       if (qRoma && qRoma !== qKana && name.includes(qRoma)) return true;
       if (english) {
-        const en = String(pokemonEngMap[p.name] || "").toLowerCase();
+        const en = String(getPokemonUiEnName(p.name) || "").toLowerCase();
         if (qEn && en.includes(qEn)) return true;
       }
       return false;
@@ -495,6 +498,37 @@ const DataService = (function () {
     return pokemonEngMap[jpName] || jpName;
   }
 
+  // 検索や入力欄の表示用。保存データやシート生成には使わない。
+  function buildPokemonUiEnNames() {
+    const keys = Object.keys(pokemonEngMap).sort((a, b) => b.length - a.length);
+    pokemonList.forEach((p) => {
+      if (p && p.name) pokemonUiEnName[p.name] = labelSpeciesEn(p.name, keys);
+    });
+  }
+
+  function labelSpeciesEn(jpName, keysLongest) {
+    if (!jpName) return jpName;
+    if (pokemonEngMap[jpName]) return pokemonEngMap[jpName];
+    const paren = jpName.match(/^([^（(【\[]+)([（(【\[].*)$/);
+    if (paren && pokemonEngMap[paren[1]]) return pokemonEngMap[paren[1]] + paren[2];
+    if (jpName.indexOf("メガ") === 0) {
+      const rest = jpName.slice(2);
+      const base = rest.replace(/[XY]$/, "");
+      if (pokemonEngMap[base]) return pokemonEngMap[base] + "(メガ" + rest.slice(base.length) + ")";
+    }
+    const keys = keysLongest || [];
+    for (let i = 0; i < keys.length; i++) {
+      const jp = keys[i];
+      if (jp && jpName.indexOf(jp) >= 0) return jpName.replace(jp, pokemonEngMap[jp]);
+    }
+    return jpName;
+  }
+
+  function getPokemonUiEnName(jpName) {
+    if (!jpName) return jpName;
+    return pokemonUiEnName[jpName] || pokemonEngMap[jpName] || jpName;
+  }
+
   /**
    * 技名（日本語）→ 英語表示名。
    * まず getDisplayMoveName で短縮してから英語マップを引く。
@@ -594,6 +628,7 @@ const DataService = (function () {
     getDisplayMoveName,
     getMoveTypeName,
     getPokemonEngName,
+    getPokemonUiEnName,
     getMoveEngName,
     getPokemonByEngName,
     formatMoveForJson,

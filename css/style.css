@@ -2427,8 +2427,8 @@ a.btn-role {
   right: .7rem;
   z-index: 20;
   width: auto;
-  padding: .32rem .7rem;
-  font-size: .72rem;
+  padding: .384rem .84rem;
+  font-size: .864rem;
   font-weight: 700;
   letter-spacing: 0;
   border-radius: var(--radius-sm);
@@ -2535,4 +2535,8 @@ html.lang-en .scan-help-section h3 {
 }
 html.lang-en .scan-example p {
   font-size: .74rem;
+}
+html.lang-en .search-result-item span {
+  font-size: .82rem;
+  line-height: 1.3;
 }
