@@ -2420,3 +2420,119 @@ a.btn-role {
   border-color: var(--btn-primary);
   background: var(--btn-secondary);
 }
+
+.btn-lang {
+  position: absolute;
+  top: max(.55rem, env(safe-area-inset-top));
+  right: .7rem;
+  z-index: 20;
+  width: auto;
+  padding: .32rem .7rem;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.btn-lang[aria-pressed="true"] {
+  background: var(--btn-primary);
+  color: #fff;
+  border-color: var(--btn-primary);
+}
+
+html.lang-en .btn-hero-front {
+  font-size: clamp(1.02rem, 3.8vw, 1.32rem);
+  letter-spacing: 0;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+html.lang-en .top-scroll-cue,
+html.lang-en .section-title,
+html.lang-en .guide-phase-title,
+html.lang-en .page-title {
+  letter-spacing: 0;
+}
+html.lang-en .section-title {
+  font-size: clamp(1.05rem, 3.6vw, 1.28rem);
+}
+html.lang-en .guide-phase-title {
+  font-size: 1.05rem;
+}
+html.lang-en .guide-phase-lead {
+  font-size: .88rem;
+}
+html.lang-en .top-scroll-cue {
+  font-size: .82rem;
+}
+html.lang-en .page-title {
+  font-size: .92rem;
+}
+html.lang-en .btn-past {
+  font-size: .75rem;
+  padding: .45rem .65rem;
+}
+html.lang-en .btn-load-image {
+  font-size: clamp(.9rem, 3.1vw, 1.1rem);
+}
+html.lang-en .btn-menu-secondary {
+  font-size: .88rem;
+}
+html.lang-en .btn-recall {
+  flex-basis: 4.6rem;
+  font-size: .72rem;
+}
+html.lang-en .form-row label {
+  font-size: .78rem;
+}
+html.lang-en .eng-output-label {
+  font-size: .82rem;
+  line-height: 1.25;
+  padding-right: .4rem;
+}
+html.lang-en .btn-copy-json,
+html.lang-en .btn-clear-moves {
+  font-size: .82rem;
+  padding: .55rem .8rem;
+}
+html.lang-en .pokemon-slot .slot-pokemon-name {
+  font-size: .78rem;
+}
+html.lang-en .pokemon-slot .slot-moves .move-display,
+html.lang-en .pokemon-slot .slot-moves .move-fixed-display,
+html.lang-en .pokemon-slot .slot-moves .move-row select {
+  font-size: .68rem;
+}
+html.lang-en .data-cache-note,
+html.lang-en .log-list-note,
+html.lang-en .preview-overlay-note,
+html.lang-en .search-hint,
+html.lang-en .qr-read-note {
+  font-size: .72rem;
+}
+html.lang-en .btn-header-io {
+  font-size: .58rem;
+}
+html.lang-en .output-actions button {
+  font-size: .74rem;
+  padding: .55rem .3rem;
+}
+html.lang-en .dialog-title {
+  font-size: .95rem;
+  line-height: 1.35;
+}
+html.lang-en .qr-read-confirm-lead {
+  font-size: .88rem;
+}
+@media (min-aspect-ratio: 1/1) {
+  html.lang-en .qr-read-confirm-lead {
+    white-space: normal;
+    font-size: min(1.15rem, 2.2vw);
+  }
+}
+html.lang-en .scan-help-section h3 {
+  font-size: .92rem;
+  letter-spacing: 0;
+}
+html.lang-en .scan-example p {
+  font-size: .74rem;
+}

@@ -305,8 +305,9 @@ const DataService = (function () {
     searchPriorityDex = list;
   }
 
-  function searchPokemon(query) {
+  function searchPokemon(query, opts) {
     const raw = (query || "").trim();
+    const english = !!(opts && opts.english);
     if (!raw) {
       const seen = {};
       const out = [];
@@ -328,10 +329,15 @@ const DataService = (function () {
     }
     const qKana = toKatakana(raw.toLowerCase());
     const qRoma = romajiToKatakana(raw);
+    const qEn = raw.toLowerCase();
     return pokemonList.filter((p) => {
       const name = toKatakana(p.name.toLowerCase());
       if (qKana && name.includes(qKana)) return true;
       if (qRoma && qRoma !== qKana && name.includes(qRoma)) return true;
+      if (english) {
+        const en = String(pokemonEngMap[p.name] || "").toLowerCase();
+        if (qEn && en.includes(qEn)) return true;
+      }
       return false;
     }).slice(0, 100);
   }
@@ -397,14 +403,25 @@ const DataService = (function () {
    * 全わざリストから検索（kind: 0=通常技, 1=ゲージ技, 2=サードアタック）
    * ポケモン検索と同様、ひらがな入力でもカタカナ技名にヒットする。
    */
-  function searchMoves(query, kind) {
+  function searchMoves(query, kind, opts) {
     const k = kind === 1 ? 1 : kind === 2 ? 2 : 0;
     let pool = moveList.filter((m) => m.kind === k);
     if (k === 1) pool = pool.filter((m) => !isThirdAttackName(m.name));
     if (k === 2) pool = pool.filter((m) => isThirdAttackName(m.name));
-    const q = toKatakana((query || "").trim().toLowerCase());
-    if (!q) return pool.slice(0, 100);
-    return pool.filter((m) => toKatakana(String(m.name || "").toLowerCase()).includes(q)).slice(0, 100);
+    const raw = (query || "").trim();
+    const q = toKatakana(raw.toLowerCase());
+    const english = !!(opts && opts.english);
+    if (!q && !(english && raw)) return pool.slice(0, 100);
+    const qEn = raw.toLowerCase();
+    return pool.filter((m) => {
+      const name = toKatakana(String(m.name || "").toLowerCase());
+      if (q && name.includes(q)) return true;
+      if (english) {
+        const en = String(getMoveEngName(m.name) || "").toLowerCase();
+        if (qEn && en.includes(qEn)) return true;
+      }
+      return false;
+    }).slice(0, 100);
   }
 
   function getMoveInfo(moveName) {
