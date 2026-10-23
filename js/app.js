@@ -7,6 +7,49 @@
 
   const $ = (id) => document.getElementById(id);
 
+  function uiEn() {
+    return !!(window.I18n && I18n.isEnglish());
+  }
+  function L(key, ja) {
+    return window.I18n ? I18n.text(key, ja) : ja;
+  }
+  function shownMove(name) {
+    if (!name || !DataService) return name || "";
+    if (uiEn() && DataService.getMoveEngName) return DataService.getMoveEngName(name);
+    return DataService.getDisplayMoveName(name);
+  }
+  function shownMon(name) {
+    if (!name) return name;
+    if (uiEn() && DataService && DataService.getPokemonUiEnName) return DataService.getPokemonUiEnName(name);
+    return name;
+  }
+  function formatWhen(at) {
+    if (!at) return "";
+    return new Date(at).toLocaleString(uiEn() ? "en-US" : "ja-JP");
+  }
+  function progressLabel(p) {
+    return uiEn() ? (p + "% done") : (p + "% 完了");
+  }
+  function slotLabel(slot, index) {
+    if (!slot) return L("emptySlot", "空きスロット");
+    if (slot.name) return slot.name;
+    return uiEn() ? ("Party " + (index + 1)) : ("パーティ" + (index + 1));
+  }
+  function alertImportError(error) {
+    const ja = error || "インポートに失敗しました";
+    if (!uiEn()) {
+      alert(ja);
+      return;
+    }
+    const map = {
+      "ファイルを読み込めませんでした": "Could not read the file",
+      "Ku6-3naToolのバックアップファイルではありません": "This is not a Ku6-3naTool backup",
+      "インポートに失敗しました": "Import failed",
+      "JSONを読み込めませんでした": "Could not read the JSON",
+    };
+    alert(map[ja] || ja);
+  }
+
   const screens = {
     top: $("screen-top"),
     menu: $("screen-menu"),
@@ -16,6 +59,7 @@
     logList: $("screen-log-list"),
     logEdit: $("screen-log-edit"),
     version: $("screen-version"),
+    qrRead: $("screen-qr-read"),
   };
 
   let state = {
@@ -42,6 +86,21 @@
   let pendingSlotSaveIndex = null;
   let outputBlob = null;
   let outputBlobUrl = null;
+  let qrReadStream = null;
+  let qrReadRaf = 0;
+  let qrReadStop = false;
+  let qrReadBusy = false;
+  let qrReadDetector = null;
+  let qrReadBlobUrl = null;
+  let qrReadFrame = 0;
+  let qrReadToken = 0;
+  let qrNativeFails = 0;
+  let qrGuideOnResize = null;
+  let qrReadDiag = emptyQrReadDiag();
+
+  const QR_CROP_RATIO = 0.72;
+  const QR_CROP_MAX = 960;
+  const QR_FULL_MAX = 960;
 
   let currentSearchSlotIndex = null;
   let currentSearchContainerId = "pokemon-slots";
@@ -99,14 +158,14 @@
     const bar = $("progress-overlay-bar");
     const txt = $("progress-overlay-text");
     if (bar) bar.style.width = "0%";
-    if (txt) txt.textContent = "0% 完了";
+    if (txt) txt.textContent = progressLabel(0);
   }
   function setProgress(percent) {
     const p = Math.min(100, Math.max(0, Math.round(percent)));
     const bar = $("progress-overlay-bar");
     const txt = $("progress-overlay-text");
     if (bar) bar.style.width = p + "%";
-    if (txt) txt.textContent = p + "% 完了";
+    if (txt) txt.textContent = progressLabel(p);
   }
   function waitForPaint() {
     return new Promise((resolve) => {
@@ -118,12 +177,12 @@
     setProgress(0);
     const hint = $("progress-overlay-hint");
     if (hint) {
-      hint.textContent = (CONFIG && CONFIG.labelRecognitionHint) || "";
+      hint.textContent = uiEn() ? "The first load can take a little while" : ((CONFIG && CONFIG.labelRecognitionHint) || "");
       hint.setAttribute("aria-hidden", hint.textContent ? "false" : "true");
     }
     const hint2 = $("progress-overlay-hint2");
     if (hint2) {
-      const t2 = (CONFIG && CONFIG.labelRecognitionHint2) || "";
+      const t2 = uiEn() ? "Favorites work, but accuracy is lower" : ((CONFIG && CONFIG.labelRecognitionHint2) || "");
       hint2.textContent = t2;
       hint2.setAttribute("aria-hidden", t2 ? "false" : "true");
     }
@@ -187,16 +246,16 @@
     const seen = {};
     const parts = [];
     if (selected && list.indexOf(selected) < 0) {
-      parts.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+      parts.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(shownMove(selected))}</option>`);
       seen[selected] = true;
     }
     list.forEach((m) => {
       if (!m || seen[m]) return;
       seen[m] = true;
-      parts.push(`<option value="${escapeHtml(m)}" ${m === selected ? "selected" : ""}>${escapeHtml(m)}</option>`);
+      parts.push(`<option value="${escapeHtml(m)}" ${m === selected ? "selected" : ""}>${escapeHtml(shownMove(m))}</option>`);
     });
     if (includeAllMovesOption) {
-      parts.push(`<option value="${ALL_MOVES_SENTINEL}">全わざリストから選択</option>`);
+      parts.push(`<option value="${ALL_MOVES_SENTINEL}">${escapeHtml(L("allMoves", "全わざリストから選択"))}</option>`);
     }
     return parts.join("");
   }
@@ -213,14 +272,14 @@
     const moveBug = slotState.moveBugMode;
     const recAttempted = containerId === "pokemon-slots" ? state.recognitionAttempted : false;
 
-    const labelSelect = (CONFIG && CONFIG.labelSelectPokemon) || "ポケモン選択";
-    const labelFailed = (CONFIG && CONFIG.labelRecognitionFailed) || "画像認識失敗";
+    const labelSelect = L("selectPokemon", (CONFIG && CONFIG.labelSelectPokemon) || "ポケモン選択");
+    const labelFailed = L("scanFailed", (CONFIG && CONFIG.labelRecognitionFailed) || "画像認識失敗");
     const labelCp = (CONFIG && CONFIG.labelCp) || "CP";
     const basePath = getBasePath();
     const shadowLightPath = basePath.replace(/\/?$/, "/") + "Image/Type&shadow/";
 
     container.innerHTML = pokemons.map((p, i) => {
-      const nameLabel = p.name || (p.dexNo === null ? (recAttempted ? labelFailed : labelSelect) : labelFailed);
+      const nameLabel = (p.name ? shownMon(p.name) : "") || (p.dexNo === null ? (recAttempted ? labelFailed : labelSelect) : labelFailed);
       const pm = p.dexNo && DataService ? DataService.getPokemonByDexNo(p.dexNo) : null;
       const isMega = !!(pm && DataService.isMegaPokemon(pm));
       const picSrc = pm && pm.picPath ? basePath.replace(/\/?$/, "/") + pm.picPath : "";
@@ -239,13 +298,13 @@
       const megaBg = isMega ? `<img class="slot-mega-bg" src="${shadowLightPath}mega_trans.png" alt="" aria-hidden="true">` : "";
       if (isMega) p.third = (moves.third && moves.third[0]) || "";
       else p.third = "";
-      const thirdLabel = p.third && DataService ? DataService.getDisplayMoveName(p.third) : "-";
+      const thirdLabel = p.third && DataService ? shownMove(p.third) : "-";
       const thirdRow = isMega ? `<div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="third"></span><div class="move-select-wrap"><span class="move-fixed-display">${escapeHtml(thirdLabel)}</span></div></div>` : "";
       const movesBlock = `
           <div class="slot-moves">
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? DataService.getDisplayMoveName(p.fast) : "")}</span></div></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? DataService.getDisplayMoveName(p.charge1) : "")}</span></div></div>
-            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? DataService.getDisplayMoveName(p.charge2) : "")}</span></div></div>${thirdRow}
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="fast"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="fast" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${fastOpts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.fast && DataService ? shownMove(p.fast) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge1"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge1" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge1Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge1 && DataService ? shownMove(p.charge1) : "")}</span></div></div>
+            <div class="move-row"><span class="move-type-icon" data-slot="${i}" data-move="charge2"></span><div class="move-select-wrap"><select data-slot="${i}" data-field="charge2" ${!p.dexNo ? "disabled" : ""}><option value="">--</option>${charge2Opts}</select><span class="move-display" aria-hidden="true">${escapeHtml(p.charge2 && DataService ? shownMove(p.charge2) : "")}</span></div></div>${thirdRow}
           </div>`;
 
       return `
@@ -257,8 +316,8 @@
           ${picOrPlaceholder}
           <div class="slot-cp">${labelCp}: <input type="text" inputmode="numeric" pattern="[0-9]*" data-slot="${i}" data-field="cp" value="${escapeHtml(p.cp)}" ${!p.dexNo ? "disabled" : ""}></div>
           <div class="slot-shadow-light">
-            <button type="button" class="shadow-light-btn ${p.isShadow ? "pressed" : ""}" data-slot="${i}" data-btn="shadow" title="シャドウ"><img src="${shadowLightPath}shadow.png" alt="シャドウ"></button>
-            <button type="button" class="shadow-light-btn ${p.isLight ? "pressed" : ""}" data-slot="${i}" data-btn="light" title="ライト"><img src="${shadowLightPath}light.png" alt="ライト"></button>
+            <button type="button" class="shadow-light-btn ${p.isShadow ? "pressed" : ""}" data-slot="${i}" data-btn="shadow" title="${escapeHtml(L("shadow", "シャドウ"))}"><img src="${shadowLightPath}shadow.png" alt="${escapeHtml(L("shadow", "シャドウ"))}"></button>
+            <button type="button" class="shadow-light-btn ${p.isLight ? "pressed" : ""}" data-slot="${i}" data-btn="light" title="${escapeHtml(L("light", "ライト"))}"><img src="${shadowLightPath}light.png" alt="${escapeHtml(L("light", "ライト"))}"></button>
           </div>${movesBlock}
         </div>`;
     }).join("");
@@ -287,7 +346,7 @@
           pokemons[slotIndex][key] = el.value;
           updateTypeIcon(slotIndex, key, el.value, containerId);
           const disp = el.parentElement && el.parentElement.querySelector(".move-display");
-          if (disp) disp.textContent = el.value && DataService ? DataService.getDisplayMoveName(el.value) : "";
+          if (disp) disp.textContent = el.value && DataService ? shownMove(el.value) : "";
           if (containerId === "log-pokemon-slots") logState.dirty = true;
           else sheetDirty = true;
         });
@@ -351,12 +410,12 @@
     if (searchInput) { searchInput.value = ""; searchInput.focus(); }
 
     function runSearch(q) {
-      const filtered = DataService.searchPokemon(q);
+      const filtered = DataService.searchPokemon(q, { english: uiEn() });
       const basePath = getBasePath();
       results.innerHTML = filtered.map((p) => `
         <div class="search-result-item" data-dex="${escapeHtml(p.dexNo)}" data-name="${escapeHtml(p.name)}">
           <img src="${basePath.replace(/\/?$/, "/") + (p.picPath || "Image/Pic/" + p.dexNo + ".png")}" alt="">
-          <span>${escapeHtml(p.name)}</span>
+          <span>${escapeHtml(shownMon(p.name))}</span>
         </div>`).join("");
       results.querySelectorAll(".search-result-item").forEach((item) => {
         const dex = item.getAttribute("data-dex");
@@ -406,13 +465,13 @@
     if (searchInput) { searchInput.value = ""; searchInput.focus(); }
     const kind = field === "fast" ? 0 : field === "third" ? 2 : 1;
     function runMoveSearch(q) {
-      const filtered = DataService.searchMoves(q, kind);
+      const filtered = DataService.searchMoves(q, kind, { english: uiEn() });
       const basePath = getBasePath();
       results.innerHTML = filtered.map((m) => {
         const typeName = m.type || "";
         const iconPath = typeName ? DataService.getTypeIconPath(typeName) : "";
         const imgHtml = iconPath ? `<img src="${basePath.replace(/\/?$/, "/") + iconPath}" alt="">` : `<span class="search-result-icon-placeholder"></span>`;
-        return `<div class="search-result-item" data-move="${escapeHtml(m.name)}">${imgHtml}<span>${escapeHtml(m.name)}</span></div>`;
+        return `<div class="search-result-item" data-move="${escapeHtml(m.name)}">${imgHtml}<span>${escapeHtml(shownMove(m.name))}</span></div>`;
       }).join("");
       results.querySelectorAll(".search-result-item").forEach((item) => {
         const moveName = item.getAttribute("data-move");
@@ -699,10 +758,14 @@
 
   function updateEngToggleUI() {
     const btn = $("toggle-eng-output");
+    const label = document.querySelector(".eng-output-label");
+    const en = uiEn();
+    const checked = en ? !state.engOutput : !!state.engOutput;
+    if (label) label.textContent = en ? L("outputJa", "Output in Japanese") : "英語で出力";
     if (!btn) return;
-    btn.setAttribute("aria-checked", state.engOutput ? "true" : "false");
+    btn.setAttribute("aria-checked", checked ? "true" : "false");
     const lbl = btn.querySelector(".toggle-label-text");
-    if (lbl) lbl.textContent = state.engOutput ? "ON" : "OFF";
+    if (lbl) lbl.textContent = checked ? "ON" : "OFF";
   }
 
   function updateMoveBugToggleUI() {
@@ -723,7 +786,7 @@
   function confirmUnsaved(message, onSave, onDiscard) {
     const overlay = $("overlay-unsaved");
     const msg = $("unsaved-message");
-    if (msg) msg.textContent = message || "変更を保存しますか？";
+    if (msg) msg.textContent = message || L("saveChanges", "変更を保存しますか？");
     unsavedCallback = { onSave, onDiscard };
     overlay.classList.add("active");
     overlay.setAttribute("aria-hidden", "false");
@@ -747,7 +810,7 @@
       return;
     }
     if (activeSlotIndex !== null && sheetDirty) {
-      confirmUnsaved("パーティの変更を保存しますか？", () => {
+      confirmUnsaved(L("saveParty", "パーティの変更を保存しますか？"), () => {
         saveCurrentToSlot(activeSlotIndex);
         closeUnsaved();
         sheetDirty = false;
@@ -863,13 +926,13 @@
     try {
       data = JSON.parse(await file.text());
     } catch (_) {
-      alert("JSONを読み込めませんでした");
+      alertImportError("JSONを読み込めませんでした");
       return;
     }
-    if (!confirm("現在の保存データを置き換えます。よろしいですか？")) return;
+    if (!confirm(L("replaceData", "現在の保存データを置き換えます。よろしいですか？"))) return;
     const result = StorageService.importBackup(data);
     if (!result.ok) {
-      alert(result.error || "インポートに失敗しました");
+      alertImportError(result.error || "インポートに失敗しました");
       return;
     }
     renderSlots({ stagger: false });
@@ -880,8 +943,8 @@
     const grid = $("slot-picker-grid");
     const slots = StorageService.getPartySlots();
     grid.innerHTML = slots.map((s, i) => {
-      const name = s ? (s.name || "パーティ" + (i + 1)) : "空きスロット";
-      const date = s ? new Date(s.at).toLocaleString("ja-JP") : "";
+      const name = slotLabel(s, i);
+      const date = s ? formatWhen(s.at) : "";
       const pics = s ? renderSlotPokemonRow(s.json) : Array(6).fill('<span class="slot-empty"></span>').join("");
       const emptyClass = s ? "" : " data-slot-empty";
       return `
@@ -953,15 +1016,15 @@
     const container = $("slot-list");
     const slots = StorageService.getPartySlots();
     container.innerHTML = slots.map((s, i) => {
-      const name = s ? (s.name || "パーティ" + (i + 1)) : "空きスロット";
-      const date = s ? new Date(s.at).toLocaleString("ja-JP") : "";
+      const name = slotLabel(s, i);
+      const date = s ? formatWhen(s.at) : "";
       const pics = s ? renderSlotPokemonRow(s.json) : Array(6).fill('<span class="slot-empty"></span>').join("");
       const emptyClass = s ? "" : " data-slot-empty";
-      const deleteBtn = s ? `<button type="button" class="btn-role btn-danger" data-action="delete" data-index="${i}">削除</button>` : "";
-      const renameBtn = s ? `<button type="button" class="btn-role btn-secondary" data-action="rename" data-index="${i}">名前編集</button>` : "";
+      const deleteBtn = s ? `<button type="button" class="btn-role btn-danger" data-action="delete" data-index="${i}">${escapeHtml(L("delete", "削除"))}</button>` : "";
+      const renameBtn = s ? `<button type="button" class="btn-role btn-secondary" data-action="rename" data-index="${i}">${escapeHtml(L("rename", "名前編集"))}</button>` : "";
       return `
         <div class="data-slot-card${emptyClass}" data-slot-index="${i}">
-          <button type="button" class="data-slot-handle" aria-label="並べ替え" data-index="${i}">
+          <button type="button" class="data-slot-handle" aria-label="${escapeHtml(L("reorder", "並べ替え"))}" data-index="${i}">
             <span class="data-slot-handle-bars" aria-hidden="true"></span>
           </button>
           <div class="data-slot-body" data-action="open" data-index="${i}">
@@ -994,7 +1057,7 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const idx = parseInt(btn.getAttribute("data-index"), 10);
-        if (confirm("このスロットを空にしますか？")) {
+        if (confirm(L("clearSlot", "このスロットを空にしますか？"))) {
           StorageService.clearPartySlot(idx);
           renderSlots({ stagger: false });
         }
@@ -1080,12 +1143,12 @@
     const container = $("log-list");
     const logs = StorageService.getBattleLogs();
     if (!logs.length) {
-      container.innerHTML = '<p class="list-empty">対戦ログはありません</p>';
+      container.innerHTML = '<p class="list-empty">' + escapeHtml(L("noLogs", "対戦ログはありません")) + "</p>";
       return;
     }
     container.innerHTML = logs.map((log) => {
       const name = "VS " + (log.opponent || "???");
-      const date = new Date(log.at).toLocaleString("ja-JP");
+      const date = formatWhen(log.at);
       const pics = renderSlotPokemonRow(log.json);
       return `
         <div class="data-slot-card" data-log-id="${escapeHtml(log.id)}">
@@ -1097,7 +1160,7 @@
             <div class="data-slot-pokemon">${pics}</div>
           </div>
           <div class="data-slot-actions">
-            <button type="button" class="btn-role btn-danger" data-action="delete-log">削除</button>
+            <button type="button" class="btn-role btn-danger" data-action="delete-log">${escapeHtml(L("delete", "削除"))}</button>
           </div>
         </div>`;
     }).join("");
@@ -1108,7 +1171,7 @@
       bindSlotTouch(body, () => openLogEdit(id));
       card.querySelector("[data-action='delete-log']").addEventListener("click", (e) => {
         e.stopPropagation();
-        if (confirm("この対戦ログを削除しますか？")) {
+        if (confirm(L("deleteLog", "この対戦ログを削除しますか？"))) {
           StorageService.deleteBattleLog(id);
           renderLogList();
         }
@@ -1160,7 +1223,7 @@
       showScreen("logList");
       return;
     }
-    confirmUnsaved("対戦ログの変更を保存しますか？", () => {
+    confirmUnsaved(L("saveLogAsk", "対戦ログの変更を保存しますか？"), () => {
       saveLog();
       closeUnsaved();
     }, () => {
@@ -1177,7 +1240,7 @@
     const menu = $("recall-menu");
     const overlay = $("overlay-recall");
     if (!items.length) {
-      menu.innerHTML = '<div class="recall-empty">履歴がありません</div>';
+      menu.innerHTML = '<div class="recall-empty">' + escapeHtml(L("noHistory", "履歴がありません")) + "</div>";
     } else {
       menu.innerHTML = items.map((v) => `<button type="button" class="recall-item" data-value="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join("");
       menu.querySelectorAll(".recall-item").forEach((btn) => {
@@ -1220,35 +1283,742 @@
     return out;
   }
 
-  function partyJsonToPrintText(json) {
-    const first = (v) => (Array.isArray(v) ? (v[0] || "") : "");
-    const body = {
-      n: json && typeof json.trainerName === "string" ? json.trainerName : "",
-      t: json && typeof json.trainerId === "string" ? json.trainerId : "",
-      f: json && json.friendCode != null ? String(json.friendCode) : "",
-      p: Array.isArray(json && json.pokemons) ? json.pokemons.slice(0, 6).map((mon) => {
-        if (!mon || typeof mon !== "object") return null;
-        return [
-          mon.dex == null ? null : mon.dex,
-          mon.CP == null ? null : mon.CP,
-          mon.shadow ? 1 : 0,
-          mon.light ? 1 : 0,
-          first(mon.fastMoves),
-          first(mon.chargedMoves1),
-          first(mon.chargedMoves2),
-          first(mon.thirdMoves),
-        ];
-      }) : [],
-    };
-    return bytesToBase32(new TextEncoder().encode(JSON.stringify(body)));
+  function BitWriter() {
+    this.bytes = [];
+    this.acc = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.write = function (value, width) {
+    let v = value >>> 0;
+    for (let i = width - 1; i >= 0; i--) {
+      this.acc = (this.acc << 1) | ((v >>> i) & 1);
+      this.nbits++;
+      if (this.nbits === 8) {
+        this.bytes.push(this.acc & 0xff);
+        this.acc = 0;
+        this.nbits = 0;
+      }
+    }
+  };
+  BitWriter.prototype.finish = function () {
+    if (this.nbits) this.bytes.push((this.acc << (8 - this.nbits)) & 0xff);
+    return new Uint8Array(this.bytes);
+  };
+
+  function BitReader(bytes) {
+    this.bytes = bytes;
+    this.pos = 0;
+  }
+  BitReader.prototype.read = function (width) {
+    let v = 0;
+    for (let i = 0; i < width; i++) {
+      const bi = this.pos++;
+      const byte = this.bytes[bi >> 3] || 0;
+      const bit = (byte >> (7 - (bi & 7))) & 1;
+      v = (v << 1) | bit;
+    }
+    return v;
+  };
+
+  function clipPrintText(value, maxChars) {
+    const chars = Array.from(String(value || "")).slice(0, maxChars);
+    let text = "";
+    const enc = new TextEncoder();
+    for (let i = 0; i < chars.length; i++) {
+      const next = text + chars[i];
+      if (enc.encode(next).length > 255) break;
+      text = next;
+    }
+    return text;
   }
 
-  function openQrDebug() {
-    const overlay = $("overlay-qr-debug");
-    if (!overlay) return;
-    renderQrDebugList();
-    overlay.classList.add("active");
-    overlay.setAttribute("aria-hidden", "false");
+  function splitPrintDex(dex) {
+    const s = String(dex == null ? "" : dex).replace(/#+$/, "");
+    const m = s.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) return { base: 0, form: 0 };
+    return {
+      base: Math.min(4095, parseInt(m[1], 10) || 0),
+      form: Math.min(31, parseInt(m[2] || "0", 10) || 0),
+    };
+  }
+
+  function moveTokenToPrintId(token) {
+    if (!token || !DataService || !DataService.getMovePrintId) return 0;
+    const jp = DataService.parseJsonMoveName(token) || "";
+    const id = DataService.getMovePrintId(jp);
+    return id > 0 && id <= 1023 ? id : 0;
+  }
+
+  function writePrintString(w, text) {
+    const bytes = new TextEncoder().encode(text);
+    w.write(bytes.length, 8);
+    for (let i = 0; i < bytes.length; i++) w.write(bytes[i], 8);
+  }
+
+  function readPrintString(r) {
+    const len = r.read(8);
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = r.read(8);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function partyJsonToPrintBytes(json) {
+    const first = (v) => (Array.isArray(v) ? (v[0] || "") : "");
+    const w = new BitWriter();
+    w.write(1, 8);
+    writePrintString(w, clipPrintText(json && json.trainerName, 50));
+    writePrintString(w, clipPrintText(json && json.trainerId, 50));
+    writePrintString(w, String(json && json.friendCode != null ? json.friendCode : "").replace(/\D/g, "").slice(0, 32));
+    const mons = Array.isArray(json && json.pokemons) ? json.pokemons : [];
+    for (let i = 0; i < 6; i++) {
+      const mon = mons[i];
+      const dex = mon && typeof mon === "object" ? splitPrintDex(mon.dex) : { base: 0, form: 0 };
+      const cp = mon && mon.CP != null ? parseInt(mon.CP, 10) : 0;
+      w.write(dex.base, 12);
+      w.write(dex.form, 5);
+      w.write(Number.isFinite(cp) ? Math.max(0, Math.min(16383, cp)) : 0, 14);
+      w.write(mon && mon.shadow ? 1 : 0, 1);
+      w.write(mon && mon.light ? 1 : 0, 1);
+      w.write(mon ? moveTokenToPrintId(first(mon.fastMoves)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves1)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves2)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.thirdMoves)) : 0, 10);
+    }
+    return w.finish();
+  }
+
+  function partyJsonToPrintText(json) {
+    return bytesToBase32(partyJsonToPrintBytes(json));
+  }
+
+  function base32ToBytes(text) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const clean = String(text || "").toUpperCase().replace(/=+$/g, "").replace(/[^A-Z2-7]/g, "");
+    let bits = 0;
+    let value = 0;
+    const out = [];
+    for (let i = 0; i < clean.length; i++) {
+      const idx = alphabet.indexOf(clean.charAt(i));
+      if (idx < 0) continue;
+      value = ((value << 5) | idx) & 0xffff;
+      bits += 5;
+      if (bits >= 8) {
+        bits -= 8;
+        out.push((value >>> bits) & 0xff);
+      }
+    }
+    return new Uint8Array(out);
+  }
+
+  function applyPrintMove(slot, field, id) {
+    if (!id || !DataService || !DataService.getMoveNameByPrintId) return;
+    const jp = DataService.getMoveNameByPrintId(id);
+    if (!jp) return;
+    if ((field === "charge1" || field === "charge2") && DataService.isThirdAttackName(jp)) return;
+    slot[field] = jp;
+  }
+
+  function printBinaryToSheetState(bytes) {
+    const r = new BitReader(bytes);
+    if (r.read(8) !== 1) return null;
+    const handleName = readPrintString(r);
+    const trainerName = readPrintString(r);
+    const friendCode = readPrintString(r).replace(/\D/g, "");
+    const pokemons = [];
+    for (let i = 0; i < 6; i++) {
+      const base = r.read(12);
+      const form = r.read(5);
+      const cp = r.read(14);
+      const shadow = r.read(1);
+      const light = r.read(1);
+      const fastId = r.read(10);
+      const c1Id = r.read(10);
+      const c2Id = r.read(10);
+      const thirdId = r.read(10);
+      const slot = emptyPokemons()[0];
+      const dexKey = base ? (form ? base + "-" + form : String(base)) : "";
+      const pm = dexKey && DataService ? DataService.getPokemonByDexNo(dexKey) : null;
+      if (pm) {
+        slot.dexNo = pm.dexNo;
+        slot.name = pm.name;
+        if (cp) slot.cp = String(cp);
+        slot.isShadow = !!shadow;
+        slot.isLight = !!light;
+        if (slot.isShadow && slot.isLight) slot.isLight = false;
+        const def = DataService.getDefaultMoves(pm);
+        slot.fast = def.fast || "";
+        slot.charge1 = def.charge1 || "";
+        slot.charge2 = def.charge2 || "";
+        slot.third = def.third || "";
+        applyPrintMove(slot, "fast", fastId);
+        applyPrintMove(slot, "charge1", c1Id);
+        applyPrintMove(slot, "charge2", c2Id);
+        applyPrintMove(slot, "third", thirdId);
+      }
+      pokemons.push(slot);
+    }
+    return {
+      handleName,
+      trainerName,
+      friendCode,
+      pokemons,
+      engOutput: false,
+      recognitionAttempted: false,
+    };
+  }
+
+  function printJsonToSheetState(bytes) {
+    const body = JSON.parse(new TextDecoder().decode(bytes));
+    if (!body || typeof body !== "object" || !Array.isArray(body.p)) return null;
+    const list = body.p;
+    const pokemons = [];
+    for (let i = 0; i < 6; i++) {
+      const row = list[i];
+      const slot = emptyPokemons()[0];
+      if (Array.isArray(row) && DataService) {
+        const pm = row[0] != null ? DataService.getPokemonByDexNo(String(row[0])) : null;
+        if (pm) {
+          slot.dexNo = pm.dexNo;
+          slot.name = pm.name;
+          const cp = parseInt(row[1], 10);
+          if (Number.isFinite(cp)) slot.cp = String(cp);
+          slot.isShadow = !!row[2];
+          slot.isLight = !!row[3];
+          if (slot.isShadow && slot.isLight) slot.isLight = false;
+          const def = DataService.getDefaultMoves(pm);
+          const fastJp = DataService.parseJsonMoveName(row[4] || "", pm.dexNo);
+          const c1Jp = DataService.parseJsonMoveName(row[5] || "", pm.dexNo);
+          const c2Jp = DataService.parseJsonMoveName(row[6] || "", pm.dexNo);
+          const t3Jp = DataService.parseJsonMoveName(row[7] || "", pm.dexNo);
+          slot.fast = fastJp || def.fast || "";
+          slot.charge1 = DataService.isThirdAttackName(c1Jp) ? (def.charge1 || "") : (c1Jp || def.charge1 || "");
+          slot.charge2 = DataService.isThirdAttackName(c2Jp) ? (def.charge2 || "") : (c2Jp || def.charge2 || "");
+          slot.third = t3Jp || def.third || "";
+        }
+      }
+      pokemons.push(slot);
+    }
+    return {
+      handleName: typeof body.n === "string" ? body.n : "",
+      trainerName: typeof body.t === "string" ? body.t : "",
+      friendCode: body.f != null ? String(body.f).replace(/\D/g, "") : "",
+      pokemons,
+      engOutput: false,
+      recognitionAttempted: false,
+    };
+  }
+
+  function printTextToSheetState(text) {
+    const bytes = base32ToBytes(text);
+    if (!bytes.length) return null;
+    if (bytes[0] === 1) return printBinaryToSheetState(bytes);
+    if (bytes[0] === 0x7b) return printJsonToSheetState(bytes);
+    return null;
+  }
+
+  function stopQrReadCamera() {
+    qrReadStop = true;
+    qrReadBusy = false;
+    unbindQrGuide();
+    if (qrReadRaf) cancelAnimationFrame(qrReadRaf);
+    qrReadRaf = 0;
+    if (qrReadStream) {
+      qrReadStream.getTracks().forEach((track) => track.stop());
+      qrReadStream = null;
+    }
+    const video = $("qr-read-video");
+    if (video) video.srcObject = null;
+  }
+
+  function emptyQrReadDiag() {
+    return { video: "", focus: "", detector: "", last: "", seen: "", invalid: "" };
+  }
+
+  function resetQrReadView() {
+    const camera = $("qr-read-camera");
+    const result = $("qr-read-result");
+    const status = $("qr-read-status");
+    const error = $("qr-read-error");
+    const live = $("qr-read-live");
+    const shade = $("qr-read-shade");
+    const img = $("qr-read-image");
+    if (camera) camera.hidden = false;
+    if (result) result.hidden = true;
+    if (status) { status.hidden = true; status.textContent = ""; }
+    if (error) { error.hidden = true; error.textContent = ""; }
+    if (live) live.textContent = L("qrStarting", "カメラを起動しています");
+    if (shade) shade.hidden = true;
+    if (img) img.removeAttribute("src");
+    qrReadDiag = emptyQrReadDiag();
+    qrReadFrame = 0;
+    qrNativeFails = 0;
+    if (qrReadBlobUrl) {
+      URL.revokeObjectURL(qrReadBlobUrl);
+      qrReadBlobUrl = null;
+    }
+  }
+
+  function refreshQrReadLive() {
+    const el = $("qr-read-live");
+    if (!el) return;
+    if (qrReadDiag.invalid) {
+      const shown = qrReadDiag.invalid === "(空)" ? L("qrEmpty", "(空)") : qrReadDiag.invalid;
+      el.textContent = L("qrReadText", "読み取った文字: ") + shown;
+      return;
+    }
+    const focusWord = {
+      "不明": L("qrFocusUnknown", "不明"),
+      "連続": L("qrFocusCont", "連続"),
+      "固定": L("qrFocusLocked", "固定"),
+    };
+    const parts = [];
+    if (qrReadDiag.video) parts.push(qrReadDiag.video);
+    if (qrReadDiag.focus) parts.push(L("qrFocus", "ピント") + (focusWord[qrReadDiag.focus] || qrReadDiag.focus));
+    parts.push(L("qrScanning", "読取中"));
+    el.textContent = parts.join(" · ");
+  }
+
+  function noteInvalidQr(text) {
+    const prefix = String(text || "").replace(/\s+/g, " ").trim().slice(0, 28);
+    qrReadDiag.invalid = prefix || "(空)";
+    qrReadDiag.seen = "形式不一致";
+    const error = $("qr-read-error");
+    if (error) {
+      error.hidden = false;
+      error.textContent = L("qrBadFormat", "QRは読み取りましたが、このアプリの形式ではありません");
+    }
+    refreshQrReadLive();
+  }
+
+  function layoutQrGuide() {
+    const video = $("qr-read-video");
+    const shade = $("qr-read-shade");
+    const guide = $("qr-read-guide");
+    if (!video || !shade || !guide) return;
+    const stage = video.parentElement;
+    const wide = window.matchMedia("(min-aspect-ratio: 1/1)").matches;
+    if (!wide) {
+      video.style.width = "";
+      video.style.height = "";
+    } else if (stage && video.videoWidth && video.videoHeight && stage.clientWidth && stage.clientHeight) {
+      const fit = Math.min(stage.clientWidth / video.videoWidth, stage.clientHeight / video.videoHeight);
+      video.style.width = Math.max(1, Math.floor(video.videoWidth * fit)) + "px";
+      video.style.height = Math.max(1, Math.floor(video.videoHeight * fit)) + "px";
+    }
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const ew = video.clientWidth;
+    const eh = video.clientHeight;
+    if (!vw || !vh || !ew || !eh) {
+      shade.hidden = true;
+      return;
+    }
+    const scale = Math.min(ew / vw, eh / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const stageRect = stage ? stage.getBoundingClientRect() : null;
+    const videoRect = video.getBoundingClientRect();
+    const ox = (stageRect ? videoRect.left - stageRect.left : 0) + (ew - dw) / 2;
+    const oy = (stageRect ? videoRect.top - stageRect.top : 0) + (eh - dh) / 2;
+    const side = Math.min(vw, vh) * QR_CROP_RATIO * scale;
+    shade.hidden = false;
+    shade.style.left = ox + "px";
+    shade.style.top = oy + "px";
+    shade.style.width = dw + "px";
+    shade.style.height = dh + "px";
+    guide.style.left = ((dw - side) / 2) + "px";
+    guide.style.top = ((dh - side) / 2) + "px";
+    guide.style.width = side + "px";
+    guide.style.height = side + "px";
+  }
+
+  function bindQrGuide() {
+    unbindQrGuide();
+    qrGuideOnResize = () => layoutQrGuide();
+    window.addEventListener("resize", qrGuideOnResize);
+    const video = $("qr-read-video");
+    if (video) video.addEventListener("loadedmetadata", qrGuideOnResize);
+  }
+
+  function unbindQrGuide() {
+    if (!qrGuideOnResize) return;
+    window.removeEventListener("resize", qrGuideOnResize);
+    const video = $("qr-read-video");
+    if (video) video.removeEventListener("loadedmetadata", qrGuideOnResize);
+    qrGuideOnResize = null;
+  }
+
+  function leaveQrRead() {
+    document.body.classList.remove("sheet-print");
+    stopQrReadCamera();
+    hideProgress();
+    resetQrReadView();
+    showScreen("version");
+  }
+
+  function backFromQrRead() {
+    const result = $("qr-read-result");
+    if (result && !result.hidden) {
+      cancelQrPrint();
+      return;
+    }
+    leaveQrRead();
+  }
+
+  async function createQrDetector() {
+    if (typeof BarcodeDetector !== "function") return null;
+    try {
+      if (typeof BarcodeDetector.getSupportedFormats === "function") {
+        const formats = await BarcodeDetector.getSupportedFormats();
+        if (!formats || formats.indexOf("qr_code") < 0) return null;
+      }
+      return new BarcodeDetector({ formats: ["qr_code"] });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function openQrReadCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("camera unavailable");
+    }
+    const attempts = [
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: true, audio: false },
+    ];
+    let lastError = null;
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(attempts[i]);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error("camera unavailable");
+  }
+
+  async function tuneQrReadTrack(stream) {
+    const track = stream && stream.getVideoTracks()[0];
+    if (!track || typeof track.getCapabilities !== "function") {
+      qrReadDiag.focus = "不明";
+      return;
+    }
+    const caps = track.getCapabilities() || {};
+    const modes = caps.focusMode || [];
+    if (modes.indexOf("continuous") >= 0) {
+      try {
+        await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        qrReadDiag.focus = "連続";
+        return;
+      } catch (_) {}
+    }
+    qrReadDiag.focus = modes.length ? "固定" : "固定";
+  }
+
+  function qrCenterCrop(w, h) {
+    const side = Math.max(1, Math.round(Math.min(w, h) * QR_CROP_RATIO));
+    const out = Math.min(side, QR_CROP_MAX);
+    return {
+      sx: Math.round((w - side) / 2),
+      sy: Math.round((h - side) / 2),
+      sw: side,
+      sh: side,
+      dw: out,
+      dh: out,
+    };
+  }
+
+  function jsQrFromRegion(video, canvas, ctx, box) {
+    if (typeof jsQR !== "function") return "";
+    if (canvas.width !== box.dw) canvas.width = box.dw;
+    if (canvas.height !== box.dh) canvas.height = box.dh;
+    ctx.drawImage(video, box.sx, box.sy, box.sw, box.sh, 0, 0, box.dw, box.dh);
+    const image = ctx.getImageData(0, 0, box.dw, box.dh);
+    const code = jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" });
+    return code && code.data ? String(code.data) : "";
+  }
+
+  async function readNativeQr(video) {
+    if (!qrReadDetector) return "";
+    try {
+      const codes = await qrReadDetector.detect(video);
+      qrNativeFails = 0;
+      if (codes && codes.length && codes[0].rawValue) return String(codes[0].rawValue);
+      return "";
+    } catch (_) {
+      qrNativeFails++;
+      if (qrNativeFails >= 3) {
+        qrReadDetector = null;
+        qrReadDiag.detector = "jsQR";
+        refreshQrReadLive();
+      }
+      return "";
+    }
+  }
+
+  async function readQrFromVideo(video, canvas, ctx, frame) {
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (!w || !h) return "";
+    if (qrReadDiag.video !== w + "×" + h) {
+      qrReadDiag.video = w + "×" + h;
+      refreshQrReadLive();
+      layoutQrGuide();
+    }
+    const phase = frame % 4;
+    if (phase === 1 && qrReadDetector) {
+      qrReadDiag.last = "ネイティブ";
+      return readNativeQr(video);
+    }
+    if (phase === 3) {
+      qrReadDiag.last = "全体";
+      const scale = w > QR_FULL_MAX ? QR_FULL_MAX / w : 1;
+      return jsQrFromRegion(video, canvas, ctx, {
+        sx: 0,
+        sy: 0,
+        sw: w,
+        sh: h,
+        dw: Math.max(1, Math.round(w * scale)),
+        dh: Math.max(1, Math.round(h * scale)),
+      });
+    }
+    qrReadDiag.last = "中央";
+    return jsQrFromRegion(video, canvas, ctx, qrCenterCrop(w, h));
+  }
+
+  async function showQrReadSheet(text) {
+    let sheetState = null;
+    try {
+      sheetState = printTextToSheetState(text);
+    } catch (_) {
+      sheetState = null;
+    }
+    if (!sheetState) return false;
+    stopQrReadCamera();
+    const camera = $("qr-read-camera");
+    const status = $("qr-read-status");
+    const result = $("qr-read-result");
+    if (camera) camera.hidden = true;
+    if (status) {
+      status.hidden = false;
+      status.textContent = L("qrMaking", "シートを作成しています");
+    }
+    showProgress();
+    try {
+      await document.fonts.ready;
+      const blob = await SheetRender.renderToBlob(sheetState, setProgress);
+      if (qrReadBlobUrl) URL.revokeObjectURL(qrReadBlobUrl);
+      qrReadBlobUrl = URL.createObjectURL(blob);
+      const img = $("qr-read-image");
+      if (img) img.src = qrReadBlobUrl;
+      if (result) result.hidden = false;
+      if (status) status.hidden = true;
+    } catch (e) {
+      console.error("[QR読み取り]", e);
+      if (status) {
+        status.hidden = false;
+        status.textContent = L("qrMakeFail", "シートを作れませんでした");
+      }
+    } finally {
+      hideProgress();
+    }
+    return true;
+  }
+
+  function cancelQrPrint() {
+    startQrRead();
+  }
+
+  function pdfNum(n) {
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  async function sheetImageToPdf(src) {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    const w = image.naturalWidth;
+    const h = image.naturalHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(image, 0, 0);
+    const pixels = ctx.getImageData(0, 0, w, h).data;
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
+      rgb[j] = pixels[i];
+      rgb[j + 1] = pixels[i + 1];
+      rgb[j + 2] = pixels[i + 2];
+    }
+    const deflated = new Blob([rgb]).stream().pipeThrough(new CompressionStream("deflate"));
+    const compressed = new Uint8Array(await new Response(deflated).arrayBuffer());
+    const pageW = 148 * 72 / 25.4;
+    const pageH = 210 * 72 / 25.4;
+    const content = "q\n" + pdfNum(pageW) + " 0 0 " + pdfNum(pageH) + " 0 0 cm\n/Im0 Do\nQ\n";
+    const enc = new TextEncoder();
+    const chunks = [];
+    let len = 0;
+    const offsets = [0];
+    const addBytes = (bytes) => {
+      chunks.push(bytes);
+      len += bytes.length;
+    };
+    const addStr = (text) => addBytes(enc.encode(text));
+    const startObj = (n) => {
+      offsets[n] = len;
+      addStr(n + " 0 obj\n");
+    };
+    const endObj = () => addStr("\nendobj\n");
+    addStr("%PDF-1.4\n");
+    startObj(1);
+    addStr("<< /Type /Catalog /Pages 2 0 R >>");
+    endObj();
+    startObj(2);
+    addStr("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    endObj();
+    startObj(3);
+    addStr("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pdfNum(pageW) + " " + pdfNum(pageH) + "] /Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>");
+    endObj();
+    startObj(4);
+    addStr("<< /Length " + enc.encode(content).length + " >>\nstream\n");
+    addStr(content);
+    addStr("\nendstream");
+    endObj();
+    startObj(5);
+    addStr("<< /Type /XObject /Subtype /Image /Width " + w + " /Height " + h + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length " + compressed.length + " >>\nstream\n");
+    addBytes(compressed);
+    addStr("\nendstream");
+    endObj();
+    const xrefAt = len;
+    addStr("xref\n0 6\n0000000000 65535 f \n");
+    for (let n = 1; n <= 5; n++) addStr(String(offsets[n]).padStart(10, "0") + " 00000 n \n");
+    addStr("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF");
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  function printQrSheet() {
+    const img = $("qr-read-image");
+    const src = img && img.getAttribute("src");
+    if (!src) return;
+    const token = qrReadToken;
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", L("qrPrintTitle", "パーティシート印刷"));
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;left:-10000px;top:0;width:148mm;height:210mm;border:0;pointer-events:none;";
+    document.body.appendChild(frame);
+    let pdfUrl = "";
+    let finished = false;
+    let started = false;
+    const cleanupFrame = () => {
+      frame.remove();
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      pdfUrl = "";
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener("afterprint", finish);
+      if (token !== qrReadToken) {
+        cleanupFrame();
+        return;
+      }
+      startQrRead();
+      setTimeout(cleanupFrame, 2000);
+    };
+    const kick = () => {
+      if (started || finished) return;
+      started = true;
+      try {
+        const win = frame.contentWindow;
+        win.addEventListener("afterprint", finish);
+        win.focus();
+        win.print();
+        setTimeout(finish, 400);
+      } catch (e) {
+        console.error("[印刷]", e);
+        finish();
+      }
+    };
+    window.addEventListener("afterprint", finish);
+    sheetImageToPdf(src).then((pdf) => {
+      if (finished || token !== qrReadToken) {
+        cleanupFrame();
+        return;
+      }
+      pdfUrl = URL.createObjectURL(pdf);
+      frame.onload = () => setTimeout(kick, 300);
+      frame.src = pdfUrl;
+      setTimeout(kick, 1500);
+    }).catch((e) => {
+      console.error("[印刷]", e);
+      finish();
+    });
+  }
+
+  async function startQrRead() {
+    qrReadToken++;
+    stopQrReadCamera();
+    resetQrReadView();
+    showScreen("qrRead");
+    const error = $("qr-read-error");
+    const video = $("qr-read-video");
+    qrReadStop = false;
+    qrReadDetector = await createQrDetector();
+    qrReadDiag.detector = qrReadDetector ? "BarcodeDetector" : "jsQR";
+    try {
+      qrReadStream = await openQrReadCamera();
+    } catch (e) {
+      console.error("[QR読み取り]", e);
+      if (error) {
+        error.hidden = false;
+        error.textContent = L("qrCameraFail", "カメラを起動できませんでした");
+      }
+      const live = $("qr-read-live");
+      if (live) live.textContent = L("qrCameraNo", "カメラを使えません");
+      return;
+    }
+    if (!video) return;
+    video.playsInline = true;
+    video.srcObject = qrReadStream;
+    bindQrGuide();
+    try {
+      await tuneQrReadTrack(qrReadStream);
+    } catch (_) {}
+    refreshQrReadLive();
+    try {
+      await video.play();
+    } catch (_) {}
+    layoutQrGuide();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const scanFrame = async () => {
+      if (qrReadStop) return;
+      if (qrReadBusy || video.readyState < 2) {
+        qrReadRaf = requestAnimationFrame(scanFrame);
+        return;
+      }
+      qrReadBusy = true;
+      let text = "";
+      try {
+        text = await readQrFromVideo(video, canvas, ctx, qrReadFrame++);
+      } catch (_) {
+        text = "";
+      }
+      qrReadBusy = false;
+      if (qrReadStop) return;
+      if (text) {
+        qrReadDiag.seen = "読取";
+        const ok = await showQrReadSheet(text);
+        if (ok || qrReadStop) return;
+        noteInvalidQr(text);
+      }
+      qrReadRaf = requestAnimationFrame(scanFrame);
+    };
+    qrReadRaf = requestAnimationFrame(scanFrame);
   }
 
   function closeQrDebug() {
@@ -1258,101 +2028,63 @@
     overlay.setAttribute("aria-hidden", "true");
   }
 
-  function renderQrDebugList() {
+  function openCurrentPartyQr() {
+    const overlay = $("overlay-qr-debug");
     const title = $("qr-debug-title");
     const body = $("qr-debug-body");
-    const back = $("btn-qr-debug-back");
-    if (title) title.textContent = "保存データを選択";
-    if (back) back.hidden = true;
-    if (!body) return;
-    const slots = StorageService.getPartySlots();
-    const filled = slots.map((s, i) => ({ s, i })).filter((x) => x.s && x.s.json);
-    if (!filled.length) {
-      body.innerHTML = '<p class="list-empty">保存データがありません</p>';
-      return;
-    }
-    body.innerHTML = '<div class="slot-picker-list">' + filled.map(({ s, i }) => {
-      const name = s.name || ("パーティ" + (i + 1));
-      const date = s.at ? new Date(s.at).toLocaleString("ja-JP") : "";
-      const pics = renderSlotPokemonRow(s.json);
-      return `
-        <button type="button" class="data-slot-card data-slot-card--pick" data-qr-slot="${i}">
-          <div class="data-slot-body">
-            <div class="data-slot-header">
-              <span class="data-slot-name">${escapeHtml(name)}</span>
-              <span class="data-slot-date">${escapeHtml(date)}</span>
-            </div>
-            <div class="data-slot-pokemon">${pics}</div>
-          </div>
-        </button>`;
-    }).join("") + "</div>";
-    body.querySelectorAll("[data-qr-slot]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        renderQrDebugCode(parseInt(btn.getAttribute("data-qr-slot"), 10));
-      });
-    });
-  }
-
-  function renderQrDebugCode(index) {
-    const title = $("qr-debug-title");
-    const body = $("qr-debug-body");
-    const back = $("btn-qr-debug-back");
-    const slots = StorageService.getPartySlots();
-    const slot = slots[index];
-    if (!slot || !slot.json || !body) {
-      renderQrDebugList();
-      return;
-    }
-    const name = slot.name || ("パーティ" + (index + 1));
-    if (title) title.textContent = name;
-    if (back) back.hidden = false;
+    if (!overlay || !body) return;
+    if (title) title.textContent = L("printQr", "印刷用QR");
     let payload = "";
     let qrUrl = "";
     let version = "";
     let error = "";
     try {
-      payload = partyJsonToPrintText(slot.json);
+      payload = partyJsonToPrintText(buildPartyJson(state));
       if (typeof qrcode !== "function") throw new Error("qrcode missing");
-      const qr = qrcode(0, "M");
+      const qr = qrcode(0, "Q");
       qr.addData(payload, "Alphanumeric");
       qr.make();
       qrUrl = qr.createDataURL(6, 4);
       version = String((qr.getModuleCount() - 17) / 4);
     } catch (e) {
-      error = "QRを作れませんでした";
-      console.error("[QRデバッグ]", e);
+      error = L("qrBuildFail", "QRを作れませんでした");
+      console.error("[印刷QR]", e);
     }
     if (error) {
       body.innerHTML = `<p class="list-empty">${escapeHtml(error)}</p>`;
-      return;
+    } else {
+      body.innerHTML = `
+        <p class="qr-debug-note">${escapeHtml(L("qrNote", "別の端末で「QR読み取り」を開き、このQRをカメラに向けてください。"))}</p>
+        <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="${escapeHtml(L("qrAlt", "表示中のパーティのQR"))}"></div>
+        <p class="qr-debug-meta">${uiEn() ? (payload.length + " characters / version " + escapeHtml(version)) : (payload.length + "文字 / バージョン" + escapeHtml(version))}</p>
+        <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
     }
-    body.innerHTML = `
-      <p class="qr-debug-note">Macではテキストエディットを前面にして、このQRを読み取ってください。出た文字が下の列と全部一致すれば成功です。</p>
-      <div class="qr-debug-image-wrap"><img src="${qrUrl}" alt="保存データのQR"></div>
-      <p class="qr-debug-meta">${payload.length}文字 / バージョン${escapeHtml(version)}</p>
-      <pre class="qr-debug-payload">${escapeHtml(payload)}</pre>`;
+    overlay.classList.add("active");
+    overlay.setAttribute("aria-hidden", "false");
   }
 
   function initGuide() {
     const container = $("guide-sections");
-    if (!container || !CONFIG || !CONFIG.guideSections) return;
-    container.innerHTML = CONFIG.guideSections.map((g, i) => `
+    const sections = uiEn() && window.I18n ? I18n.guideSections() : (CONFIG && CONFIG.guideSections);
+    if (!container || !sections) return;
+    container.innerHTML = sections.map((g, i) => `
       <article class="guide-phase"${i === 0 ? "" : " data-reveal"}>
         <p class="guide-phase-num">${escapeHtml(g.num)}</p>
         <h3 class="guide-phase-title">${escapeHtml(g.title)}</h3>
         <p class="guide-phase-lead">${escapeHtml(g.lead)}</p>
         ${g.image ? `<figure class="guide-phase-figure"><img src="${g.image}" alt="${escapeHtml(g.imageAlt || "")}" width="340" height="600" loading="lazy"></figure>` : ""}
       </article>
-      ${i < CONFIG.guideSections.length - 1 ? '<div class="lp-connector" aria-hidden="true"></div>' : ""}
+      ${i < sections.length - 1 ? '<div class="lp-connector" aria-hidden="true"></div>' : ""}
     `).join("");
     if (window.AnimService) window.AnimService.initRevealObserver();
   }
 
   function initScanHelp() {
     const container = $("scan-help-sections");
-    if (!container || !CONFIG || !CONFIG.scanHelpSections) return;
-    container.innerHTML = `<h2 class="section-title">上手くいかない時は</h2>` +
-      CONFIG.scanHelpSections.map((s) => `
+    const sections = uiEn() && window.I18n ? I18n.scanHelpSections() : (CONFIG && CONFIG.scanHelpSections);
+    if (!container || !sections) return;
+    container.innerHTML = `<h2 class="section-title">${escapeHtml(L("ifScanFails", "上手くいかない時は"))}</h2>` +
+      sections.map((s) => `
         <div class="scan-help-section">
           <h3>${escapeHtml(s.title)}</h3>
           <p>${s.body.replace(/\n/g, "<br>")}</p>
@@ -1364,7 +2096,9 @@
     if (versionEl && CONFIG && CONFIG.appVersion) versionEl.textContent = CONFIG.appVersion;
     const shareBtn = $("btn-share-x");
     if (shareBtn) {
-      const text = "Ku6-3naToolで6-3見せ合いシートを作っています\nhttps://kurosana.github.io/ku6-3naTool/";
+      const text = uiEn()
+        ? L("shareText", "Making a 6-3 sheet with Ku6-3naTool\nhttps://kurosana.github.io/ku6-3naTool/")
+        : "Ku6-3naToolで6-3見せ合いシートを作っています\nhttps://kurosana.github.io/ku6-3naTool/";
       shareBtn.href = "https://x.com/intent/post?text=" + encodeURIComponent(text);
     }
   }
@@ -1407,13 +2141,34 @@
     });
   }
 
+  function refreshUiLanguage() {
+    if (window.I18n) I18n.apply();
+    updateEngToggleUI();
+    initGuide();
+    initScanHelp();
+    initMenu();
+    renderPokemonSlots("pokemon-slots");
+    renderPokemonSlots("log-pokemon-slots");
+    if ($("slot-list")) renderSlots({ stagger: false });
+    if ($("log-list") && $("screen-log-list") && $("screen-log-list").classList.contains("active")) renderLogList();
+    const live = $("qr-read-live");
+    if (live && $("screen-qr-read") && $("screen-qr-read").classList.contains("active")) refreshQrReadLive();
+  }
+
   function initEventListeners() {
+    $("btn-lang-en").addEventListener("click", () => {
+      if (!window.I18n) return;
+      I18n.setEnglish(!I18n.isEnglish());
+      refreshUiLanguage();
+    });
     $("btn-to-menu").addEventListener("click", () => showScreen("menu"));
     $("btn-to-version").addEventListener("click", () => showScreen("version"));
-    $("btn-qr-debug").addEventListener("click", openQrDebug);
+    $("btn-qr-read").addEventListener("click", startQrRead);
+    $("btn-back-qr-read").addEventListener("click", backFromQrRead);
+    $("btn-qr-print-cancel").addEventListener("click", cancelQrPrint);
+    $("btn-qr-print").addEventListener("click", printQrSheet);
     $("btn-qr-debug-close").addEventListener("click", closeQrDebug);
     $("qr-debug-backdrop").addEventListener("click", closeQrDebug);
-    $("btn-qr-debug-back").addEventListener("click", renderQrDebugList);
     $("btn-back-version").addEventListener("click", () => showScreen("top"));
     $("btn-back-top").addEventListener("click", () => showScreen("top"));
     $("btn-new-party").addEventListener("click", openSheetFresh);
@@ -1443,6 +2198,7 @@
     $("btn-close-output").addEventListener("click", closeOutputOverlay);
     $("output-backdrop").addEventListener("click", closeOutputOverlay);
     $("btn-download-image").addEventListener("click", downloadOutputImage);
+    $("btn-output-qr").addEventListener("click", openCurrentPartyQr);
     $("btn-save-to-slot").addEventListener("click", openSlotPicker);
     $("btn-slot-picker-cancel").addEventListener("click", closeSlotPicker);
     $("slot-picker-backdrop").addEventListener("click", closeSlotPicker);
@@ -1475,7 +2231,7 @@
       const ok = await copyJsonToClipboard();
       const btn = $("btn-copy-json");
       const orig = btn.textContent;
-      btn.textContent = ok ? "コピーしました" : "コピー失敗";
+      btn.textContent = ok ? L("copied", "コピーしました") : L("copyFail", "コピー失敗");
       btn.classList.toggle("copied", ok);
       btn.classList.toggle("copy-failed", !ok);
       setTimeout(() => { btn.textContent = orig; btn.classList.remove("copied", "copy-failed"); }, 2000);
@@ -1547,14 +2303,11 @@
     } catch (e) {
       console.error(e);
     }
-    initGuide();
-    initScanHelp();
-    initMenu();
     initVersionPage();
     initImageInput();
     initEventListeners();
     loadSavedInputs();
-    updateEngToggleUI();
+    refreshUiLanguage();
     showScreen("top");
   }
 

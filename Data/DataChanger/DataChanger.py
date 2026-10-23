@@ -47,6 +47,7 @@ def restore_backup():
         move = load_csv(MOVE_FILE)
         back = load_csv(MOVE_BACK)
 
+        # 優先度は4列目だけ戻す。5列目の印刷用技番号は上書きしない。
         back_map = {r[1]: r[3] for r in back if len(r) >= 4}
 
         for r in move:

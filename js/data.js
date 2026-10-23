@@ -18,6 +18,7 @@ const DataService = (function () {
   let pokeMovelist = [];
   let typeMap = {};
   let pokemonEngMap = {}; // 日本語名 → 英語名
+  let pokemonUiEnName = {}; // 表示用。種族名だけ英語、フォルム表記は日本語のまま
   let moveEngMap = {};    // 日本語名 → 英語名
   let pokemonEngToJpMap = {}; // 英語名（lower） → 日本語名
   let moveEngToJpMap = {};    // 正規化トークン（FEINT_ATTACK） → 日本語名
@@ -80,6 +81,7 @@ const DataService = (function () {
       name: row[1],
       type: row[2],
       priority: parseInt(row[3], 10) || 99,
+      printId: parseInt(row[4], 10) || 0,
     }));
 
     const moveByName = {};
@@ -113,6 +115,8 @@ const DataService = (function () {
         pokemonEngToJpMap[en.toLowerCase()] = jp;
       }
     });
+    buildPokemonUiEnNames();
+
     parseCSV(moveEngCsv).slice(1).forEach((row) => {
       if (row[0] && row[1]) {
         const jp = row[0].trim();
@@ -130,12 +134,17 @@ const DataService = (function () {
   // 大文字化 → 空白/ハイフンを _ に → 英数字とアンダースコア以外を除去
   function normalizeMoveToken(engName) {
     if (!engName) return "";
-    return String(engName)
+    const raw = String(engName);
+    const plus = (raw.match(/\++$/) || [""])[0];
+    const base = raw.slice(0, raw.length - plus.length);
+    const token = base
       .toUpperCase()
       .replace(/[\s\-]+/g, "_")
       .replace(/[^A-Z0-9_]/g, "")
       .replace(/_+/g, "_")
       .replace(/^_|_$/g, "");
+    if (!plus) return token;
+    return token + "_" + "PLUS".repeat(plus.length);
   }
 
   function getPokemonList() {
@@ -299,8 +308,9 @@ const DataService = (function () {
     searchPriorityDex = list;
   }
 
-  function searchPokemon(query) {
+  function searchPokemon(query, opts) {
     const raw = (query || "").trim();
+    const english = !!(opts && opts.english);
     if (!raw) {
       const seen = {};
       const out = [];
@@ -322,10 +332,15 @@ const DataService = (function () {
     }
     const qKana = toKatakana(raw.toLowerCase());
     const qRoma = romajiToKatakana(raw);
+    const qEn = raw.toLowerCase();
     return pokemonList.filter((p) => {
       const name = toKatakana(p.name.toLowerCase());
       if (qKana && name.includes(qKana)) return true;
       if (qRoma && qRoma !== qKana && name.includes(qRoma)) return true;
+      if (english) {
+        const en = String(getPokemonUiEnName(p.name) || "").toLowerCase();
+        if (qEn && en.includes(qEn)) return true;
+      }
       return false;
     }).slice(0, 100);
   }
@@ -391,18 +406,44 @@ const DataService = (function () {
    * 全わざリストから検索（kind: 0=通常技, 1=ゲージ技, 2=サードアタック）
    * ポケモン検索と同様、ひらがな入力でもカタカナ技名にヒットする。
    */
-  function searchMoves(query, kind) {
+  function searchMoves(query, kind, opts) {
     const k = kind === 1 ? 1 : kind === 2 ? 2 : 0;
     let pool = moveList.filter((m) => m.kind === k);
     if (k === 1) pool = pool.filter((m) => !isThirdAttackName(m.name));
     if (k === 2) pool = pool.filter((m) => isThirdAttackName(m.name));
-    const q = toKatakana((query || "").trim().toLowerCase());
-    if (!q) return pool.slice(0, 100);
-    return pool.filter((m) => toKatakana(String(m.name || "").toLowerCase()).includes(q)).slice(0, 100);
+    const raw = (query || "").trim();
+    const q = toKatakana(raw.toLowerCase());
+    const english = !!(opts && opts.english);
+    if (!q && !(english && raw)) return pool.slice(0, 100);
+    const qEn = raw.toLowerCase();
+    return pool.filter((m) => {
+      const name = toKatakana(String(m.name || "").toLowerCase());
+      if (q && name.includes(q)) return true;
+      if (english) {
+        const en = String(getMoveEngName(m.name) || "").toLowerCase();
+        if (qEn && en.includes(qEn)) return true;
+      }
+      return false;
+    }).slice(0, 100);
   }
 
   function getMoveInfo(moveName) {
     return moveList.find((m) => m.name === moveName);
+  }
+
+  /** 印刷QR用の技番号（move_list.csv 5列目、1始まり）。未採番は 0。 */
+  function getMovePrintId(jpName) {
+    if (!jpName) return 0;
+    const info = getMoveInfo(jpName);
+    const id = info && info.printId;
+    return id > 0 && id <= 1023 ? id : 0;
+  }
+
+  function getMoveNameByPrintId(id) {
+    const n = parseInt(id, 10);
+    if (!n) return "";
+    const info = moveList.find((m) => m.printId === n);
+    return info ? info.name : "";
   }
 
   function getDefaultMoves(pokemon) {
@@ -455,6 +496,37 @@ const DataService = (function () {
   function getPokemonEngName(jpName) {
     if (!jpName) return jpName;
     return pokemonEngMap[jpName] || jpName;
+  }
+
+  // 検索や入力欄の表示用。保存データやシート生成には使わない。
+  function buildPokemonUiEnNames() {
+    const keys = Object.keys(pokemonEngMap).sort((a, b) => b.length - a.length);
+    pokemonList.forEach((p) => {
+      if (p && p.name) pokemonUiEnName[p.name] = labelSpeciesEn(p.name, keys);
+    });
+  }
+
+  function labelSpeciesEn(jpName, keysLongest) {
+    if (!jpName) return jpName;
+    if (pokemonEngMap[jpName]) return pokemonEngMap[jpName];
+    const paren = jpName.match(/^([^（(【\[]+)([（(【\[].*)$/);
+    if (paren && pokemonEngMap[paren[1]]) return pokemonEngMap[paren[1]] + paren[2];
+    if (jpName.indexOf("メガ") === 0) {
+      const rest = jpName.slice(2);
+      const base = rest.replace(/[XY]$/, "");
+      if (pokemonEngMap[base]) return pokemonEngMap[base] + "(メガ" + rest.slice(base.length) + ")";
+    }
+    const keys = keysLongest || [];
+    for (let i = 0; i < keys.length; i++) {
+      const jp = keys[i];
+      if (jp && jpName.indexOf(jp) >= 0) return jpName.replace(jp, pokemonEngMap[jp]);
+    }
+    return jpName;
+  }
+
+  function getPokemonUiEnName(jpName) {
+    if (!jpName) return jpName;
+    return pokemonUiEnName[jpName] || pokemonEngMap[jpName] || jpName;
   }
 
   /**
@@ -549,11 +621,14 @@ const DataService = (function () {
     isThirdAttackName,
     searchMoves,
     getMoveInfo,
+    getMovePrintId,
+    getMoveNameByPrintId,
     getDefaultMoves,
     getTypeIconPath,
     getDisplayMoveName,
     getMoveTypeName,
     getPokemonEngName,
+    getPokemonUiEnName,
     getMoveEngName,
     getPokemonByEngName,
     formatMoveForJson,
