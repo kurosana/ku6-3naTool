@@ -129,7 +129,12 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.15", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.19", v || "missing");
+      assert("キュウコンのウェザーボールはほのお", DataService.parseJsonMoveName("WEATHER_BALL", "38") === "ウェザーボール(ほのお)");
+      assert("ウェザーボール(ほのお)のタイプ", DataService.getMoveTypeName("ウェザーボール(ほのお)") === "ほのお");
+      assert("ウェザーボールほのおの往復", DataService.parseJsonMoveName(DataService.formatMoveForJson("ウェザーボール(ほのお)"), "38") === "ウェザーボール(ほのお)");
+      assert("ポワルンのノーマルウェザーボール", DataService.parseJsonMoveName("WEATHER_BALL", "351") === "ウェザーボール");
+      assert("ポワルンのいわウェザーボール", DataService.parseJsonMoveName(DataService.formatMoveForJson("ウェザーボール(いわ)"), "351") === "ウェザーボール(いわ)");
 
       const cram = DataService.getMovesForPokemon("845");
       const seal = DataService.getMovesForPokemon("364");

@@ -130,6 +130,32 @@ const DataService = (function () {
     ready = true;
   }
 
+  // 括弧でタイプを分けている技（ウェザーボール等）をトークンでも区別する
+  const MOVE_TYPE_TOKEN = {
+    ノーマル: "NORMAL",
+    ほのお: "FIRE",
+    みず: "WATER",
+    でんき: "ELECTRIC",
+    くさ: "GRASS",
+    こおり: "ICE",
+    かくとう: "FIGHTING",
+    どく: "POISON",
+    じめん: "GROUND",
+    ひこう: "FLYING",
+    エスパー: "PSYCHIC",
+    むし: "BUG",
+    いわ: "ROCK",
+    ゴースト: "GHOST",
+    ドラゴン: "DRAGON",
+    あく: "DARK",
+    はがね: "STEEL",
+    フェアリー: "FAIRY",
+  };
+  const MOVE_TOKEN_TYPE = {};
+  Object.keys(MOVE_TYPE_TOKEN).forEach((jp) => {
+    MOVE_TOKEN_TYPE[MOVE_TYPE_TOKEN[jp]] = jp;
+  });
+
   // 英語技名 → "FEINT_ATTACK" 形式トークン化
   // 大文字化 → 空白/ハイフンを _ に → 英数字とアンダースコア以外を除去
   function normalizeMoveToken(engName) {
@@ -558,29 +584,86 @@ const DataService = (function () {
   function formatMoveForJson(jpName) {
     if (!jpName) return "";
     const eng = getMoveEngName(jpName);
-    return normalizeMoveToken(eng);
+    const token = normalizeMoveToken(eng);
+    return appendMoveTypeToken(jpName, token);
+  }
+
+  // 「ウェザーボール(ほのお)」のように表示名が同じ技を、タイプ付きトークンにする
+  function appendMoveTypeToken(jpName, token) {
+    if (!token || !jpName) return token || "";
+    const paren = String(jpName).match(/[（(]([^）)]+)[）)]/);
+    if (!paren) return token;
+    const typeToken = MOVE_TYPE_TOKEN[paren[1]];
+    if (!typeToken || !getMoveInfo(jpName)) return token;
+    if (getDisplayMoveName(jpName) === jpName) return token;
+    const plus = token.match(/(_PLUS)+$/) || [""];
+    const stem = token.slice(0, token.length - plus[0].length);
+    if (stem.endsWith("_" + typeToken)) return token;
+    return stem + "_" + typeToken + plus[0];
+  }
+
+  function typedMoveName(baseJp, typeJp) {
+    const base = String(baseJp || "").replace(/\++$/, "");
+    const plus = (String(baseJp || "").match(/\++$/) || [""])[0];
+    if (!base || !typeJp) return "";
+    const half = base + "(" + typeJp + ")" + plus;
+    const full = base + "（" + typeJp + "）" + plus;
+    if (getMoveInfo(half)) return half;
+    if (getMoveInfo(full)) return full;
+    return "";
+  }
+
+  // WEATHER_BALL_FIRE のように末尾のタイプトークンを外す。登録済みトークンは壊さない。
+  function splitTypedMoveToken(norm) {
+    const plus = norm.match(/(_PLUS)+$/) || [""];
+    let stem = norm.slice(0, norm.length - plus[0].length);
+    const typeTokens = Object.keys(MOVE_TOKEN_TYPE).sort((a, b) => b.length - a.length);
+    for (let i = 0; i < typeTokens.length; i++) {
+      const en = typeTokens[i];
+      if (stem.length > en.length + 1 && stem.endsWith("_" + en)) {
+        return {
+          baseNorm: stem.slice(0, -(en.length + 1)) + plus[0],
+          typeJp: MOVE_TOKEN_TYPE[en],
+        };
+      }
+    }
+    return { baseNorm: norm, typeJp: "" };
+  }
+
+  function resolveMoveToken(norm) {
+    if (moveEngToJpMap[norm]) return moveEngToJpMap[norm];
+    const split = splitTypedMoveToken(norm);
+    if (!split.typeJp) return "";
+    const baseJp = moveEngToJpMap[split.baseNorm];
+    if (!baseJp) return "";
+    return typedMoveName(baseJp, split.typeJp);
   }
 
   /**
-   * JSON 内の技トークン（"FEINT_ATTACK"）→ 日本語技名。
+   * JSON 内の技トークン（"FEINT_ATTACK" 形式）→ 日本語技名。
    * dexNo を渡された場合、そのポケモンが覚える技に絞って一致するものを優先する。
+   * 表示名が同じ技（ウェザーボール等）は、習得しているタイプ付きの名前を返す。
    * 見つからなければ空文字を返す。
    */
   function parseJsonMoveName(token, dexNo) {
     if (!token) return "";
     const norm = normalizeMoveToken(token);
     if (!norm) return "";
-    const jp = moveEngToJpMap[norm];
+    const jp = resolveMoveToken(norm);
     if (!jp) return "";
     if (dexNo) {
       const moves = getMovesForPokemon(dexNo);
       const all = (moves.fast || []).concat(moves.charge || []).concat(moves.third || []);
+      if (all.indexOf(jp) >= 0) return jp;
+      const familyKey = (name) => getDisplayMoveName(String(name || "").replace(/\++$/, ""));
+      const ownedFamily = all.filter((m) => familyKey(m) === familyKey(jp));
+      if (ownedFamily.length === 1) return ownedFamily[0];
       // 「めざめるパワー〇〇」のように同一英語名で複数ある場合は当該ポケモンが覚えるものを優先
-      if (jp === "めざめるパワー") {
+      if (jp === "めざめるパワー" || familyKey(jp) === "めざめるパワー") {
         const owned = all.find((m) => /^めざめるパワー/.test(m));
         if (owned) return owned;
       }
-      if (all.indexOf(jp) >= 0) return jp;
+      if (ownedFamily.indexOf(jp) >= 0) return jp;
       // 習得リスト外でも move_list にあれば受理（技不具合の緊急登録の JSON 往復用）
       if (getMoveInfo(jp)) return jp;
       return "";
