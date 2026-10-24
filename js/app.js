@@ -1342,9 +1342,9 @@
     };
   }
 
-  function moveTokenToPrintId(token) {
+  function moveTokenToPrintId(token, dexNo) {
     if (!token || !DataService || !DataService.getMovePrintId) return 0;
-    const jp = DataService.parseJsonMoveName(token) || "";
+    const jp = DataService.parseJsonMoveName(token, dexNo) || "";
     const id = DataService.getMovePrintId(jp);
     return id > 0 && id <= 1023 ? id : 0;
   }
@@ -1379,10 +1379,10 @@
       w.write(Number.isFinite(cp) ? Math.max(0, Math.min(16383, cp)) : 0, 14);
       w.write(mon && mon.shadow ? 1 : 0, 1);
       w.write(mon && mon.light ? 1 : 0, 1);
-      w.write(mon ? moveTokenToPrintId(first(mon.fastMoves)) : 0, 10);
-      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves1)) : 0, 10);
-      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves2)) : 0, 10);
-      w.write(mon ? moveTokenToPrintId(first(mon.thirdMoves)) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.fastMoves), mon.dex) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves1), mon.dex) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.chargedMoves2), mon.dex) : 0, 10);
+      w.write(mon ? moveTokenToPrintId(first(mon.thirdMoves), mon.dex) : 0, 10);
     }
     return w.finish();
   }
