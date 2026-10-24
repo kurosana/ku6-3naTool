@@ -122,8 +122,10 @@ const DataService = (function () {
         const jp = row[0].trim();
         const en = row[1].trim();
         moveEngMap[jp] = en;
+        const folded = foldAsciiWidth(jp);
+        if (folded && folded !== jp && !moveEngMap[folded]) moveEngMap[folded] = en;
         const token = normalizeMoveToken(en);
-        if (token) moveEngToJpMap[token] = jp;
+        if (token) moveEngToJpMap[token] = canonicalMoveName(jp) || jp;
       }
     });
 
@@ -563,7 +565,20 @@ const DataService = (function () {
   function getMoveEngName(moveName) {
     if (!moveName) return moveName;
     const disp = getDisplayMoveName(moveName); // 括弧除去・めざパ短縮
-    return moveEngMap[disp] || disp;
+    return moveEngMap[disp] || moveEngMap[foldAsciiWidth(disp)] || disp;
+  }
+
+  // 全角英数（１０、Ｖ）を半角にして、英語名表の表記ゆれを吸収する
+  function foldAsciiWidth(text) {
+    return String(text || "").replace(/[\uFF01-\uFF5E]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+  }
+
+  function canonicalMoveName(name) {
+    if (!name) return "";
+    if (getMoveInfo(name)) return name;
+    const folded = foldAsciiWidth(name);
+    const found = moveList.find((m) => m.name === folded || foldAsciiWidth(m.name) === folded);
+    return found ? found.name : "";
   }
 
   /**
@@ -583,14 +598,26 @@ const DataService = (function () {
    */
   function formatMoveForJson(jpName) {
     if (!jpName) return "";
-    const eng = getMoveEngName(jpName);
-    const token = normalizeMoveToken(eng);
-    return appendMoveTypeToken(jpName, token);
+    const canonical = canonicalMoveName(jpName) || jpName;
+    const eng = getMoveEngName(canonical);
+    const token = appendMoveTypeToken(canonical, normalizeMoveToken(eng));
+    if (token) return token;
+    return canonical;
   }
 
-  // 「ウェザーボール(ほのお)」のように表示名が同じ技を、タイプ付きトークンにする
+  // 「ウェザーボール(ほのお)」や「めざめるパワーほのお」をタイプ付きトークンにする
   function appendMoveTypeToken(jpName, token) {
-    if (!token || !jpName) return token || "";
+    if (!jpName) return token || "";
+    const hp = String(jpName).match(/^めざめるパワー(.+)$/);
+    if (hp && MOVE_TYPE_TOKEN[hp[1]]) {
+      const typeToken = MOVE_TYPE_TOKEN[hp[1]];
+      const base = token || "HIDDEN_POWER";
+      const plus = base.match(/(_PLUS)+$/) || [""];
+      const stem = base.slice(0, base.length - plus[0].length);
+      if (stem.endsWith("_" + typeToken)) return base;
+      return stem + "_" + typeToken + plus[0];
+    }
+    if (!token) return token || "";
     const paren = String(jpName).match(/[（(]([^）)]+)[）)]/);
     if (!paren) return token;
     const typeToken = MOVE_TYPE_TOKEN[paren[1]];
@@ -608,8 +635,11 @@ const DataService = (function () {
     if (!base || !typeJp) return "";
     const half = base + "(" + typeJp + ")" + plus;
     const full = base + "（" + typeJp + "）" + plus;
-    if (getMoveInfo(half)) return half;
-    if (getMoveInfo(full)) return full;
+    const joined = base + typeJp + plus;
+    const found = canonicalMoveName(half) || canonicalMoveName(full) || canonicalMoveName(joined);
+    if (found) return found;
+    const baseName = canonicalMoveName(base) || base;
+    if (baseName === "めざめるパワー" && MOVE_TYPE_TOKEN[typeJp]) return "めざめるパワー" + typeJp + plus;
     return "";
   }
 
@@ -631,7 +661,7 @@ const DataService = (function () {
   }
 
   function resolveMoveToken(norm) {
-    if (moveEngToJpMap[norm]) return moveEngToJpMap[norm];
+    if (moveEngToJpMap[norm]) return canonicalMoveName(moveEngToJpMap[norm]) || moveEngToJpMap[norm];
     const split = splitTypedMoveToken(norm);
     if (!split.typeJp) return "";
     const baseJp = moveEngToJpMap[split.baseNorm];
@@ -648,8 +678,8 @@ const DataService = (function () {
   function parseJsonMoveName(token, dexNo) {
     if (!token) return "";
     const norm = normalizeMoveToken(token);
-    if (!norm) return "";
-    const jp = resolveMoveToken(norm);
+    let jp = norm ? resolveMoveToken(norm) : "";
+    if (!jp) jp = canonicalMoveName(token);
     if (!jp) return "";
     if (dexNo) {
       const moves = getMovesForPokemon(dexNo);
@@ -657,9 +687,9 @@ const DataService = (function () {
       if (all.indexOf(jp) >= 0) return jp;
       const familyKey = (name) => getDisplayMoveName(String(name || "").replace(/\++$/, ""));
       const ownedFamily = all.filter((m) => familyKey(m) === familyKey(jp));
-      if (ownedFamily.length === 1) return ownedFamily[0];
-      // 「めざめるパワー〇〇」のように同一英語名で複数ある場合は当該ポケモンが覚えるものを優先
-      if (jp === "めざめるパワー" || familyKey(jp) === "めざめるパワー") {
+      // タイプなしのトークン（WEATHER_BALL / HIDDEN_POWER）だけ、覚えている1種類に寄せる
+      if (jp === familyKey(jp) && ownedFamily.length === 1) return ownedFamily[0];
+      if (jp === "めざめるパワー") {
         const owned = all.find((m) => /^めざめるパワー/.test(m));
         if (owned) return owned;
       }
