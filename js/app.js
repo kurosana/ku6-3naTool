@@ -1069,58 +1069,221 @@
   }
 
   function bindSlotReorder(container) {
-    let dragEl = null;
-    let startIndex = -1;
-    let dragging = false;
-    let startY = 0;
+    const HOLD_MS = 50;
+    const SLOP_PX = 4;
+    const SCROLL_ZONE = 76;
+    const SCROLL_MAX = 0.9;
+    let session = null;
 
-    function finish(cancel) {
-      if (!dragEl) return;
-      const from = startIndex;
-      const cards = [...container.querySelectorAll(".data-slot-card")];
-      const to = cards.indexOf(dragEl);
-      const moved = dragging && from >= 0 && to >= 0 && from !== to;
-      dragEl.classList.remove("is-dragging");
+    function scrollParent(el) {
+      let node = el.parentElement;
+      while (node && node !== document.body) {
+        const oy = getComputedStyle(node).overflowY;
+        if ((oy === "auto" || oy === "scroll") && node.scrollHeight > node.clientHeight + 1) return node;
+        node = node.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function insertionIndex(blocks, from, visualCenter) {
+      const others = blocks.filter((block) => block.index !== from).sort((left, right) => left.top - right.top);
+      let insertAt = 0;
+      for (let i = 0; i < others.length; i++) {
+        const block = others[i];
+        if (visualCenter > block.top + block.height / 2) insertAt += 1;
+      }
+      return insertAt;
+    }
+
+    function contentShift(blocks, from, insertAt) {
+      const sorted = blocks.slice().sort((left, right) => left.top - right.top);
+      let gap = 0;
+      if (sorted.length > 1) {
+        let sum = 0;
+        for (let i = 1; i < sorted.length; i++) {
+          sum += sorted[i].top - (sorted[i - 1].top + sorted[i - 1].height);
+        }
+        gap = sum / (sorted.length - 1);
+      }
+      const order = sorted.map((block) => block.index).filter((index) => index !== from);
+      order.splice(Math.max(0, Math.min(insertAt, order.length)), 0, from);
+      const nextTop = new Map();
+      let y = sorted.length ? sorted[0].top : 0;
+      order.forEach((index) => {
+        nextTop.set(index, y);
+        const height = blocks.find((block) => block.index === index).height;
+        y += height + gap;
+      });
+      const shift = new Map();
+      blocks.forEach((block) => {
+        shift.set(block.index, (nextTop.get(block.index) ?? block.top) - block.top);
+      });
+      return shift;
+    }
+
+    function applySession(followFinger) {
+      if (!session) return;
+      const scrollDelta = session.scroller.scrollTop - session.originScroll;
+      const fingerShift = session.fingerY - session.originClientY + scrollDelta;
+      const shift = contentShift(session.blocks, session.from, session.insertAt);
+      session.blocks.forEach((block) => {
+        const el = block.el;
+        if (block.index === session.from && followFinger) {
+          el.style.transition = "none";
+          el.style.zIndex = "5";
+          el.style.transform = "translateY(" + fingerShift + "px) scale(1.03)";
+          el.classList.add("is-lifted");
+          return;
+        }
+        const dy = shift.get(block.index) || 0;
+        el.style.zIndex = "";
+        el.style.transition = "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+        el.style.transform = dy ? "translateY(" + dy + "px)" : "";
+        el.classList.remove("is-lifted");
+      });
+      if (!followFinger) {
+        const dragged = session.blocks.find((block) => block.index === session.from);
+        if (!dragged) return;
+        const dy = shift.get(session.from) || 0;
+        dragged.el.style.transition = "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+        dragged.el.style.transform = dy ? "translateY(" + dy + "px) scale(1)" : "scale(1)";
+      }
+    }
+
+    function clearTransforms() {
+      container.querySelectorAll(".data-slot-card").forEach((el) => {
+        el.style.transform = "";
+        el.style.transition = "";
+        el.style.zIndex = "";
+        el.classList.remove("is-lifted");
+      });
       container.classList.remove("is-reordering");
-      dragEl = null;
-      startIndex = -1;
-      dragging = false;
-      if (moved && !cancel) StorageService.reorderPartySlots(from, to);
-      if (moved || cancel) renderSlots({ stagger: false });
+      document.documentElement.classList.remove("is-slot-reordering");
+    }
+
+    function finish(commit) {
+      const current = session;
+      if (!current) return;
+      cancelAnimationFrame(current.raf);
+      if (!commit) current.insertAt = current.from;
+      const moved = commit && current.insertAt !== current.from;
+      applySession(false);
+      window.setTimeout(() => {
+        if (session !== current) return;
+        session = null;
+        clearTransforms();
+        if (moved) {
+          StorageService.reorderPartySlots(current.from, current.insertAt);
+          renderSlots({ stagger: false });
+        }
+      }, 190);
+    }
+
+    function beginLift(from, clientY, pointerId) {
+      const scroller = scrollParent(container);
+      const base = container.getBoundingClientRect().top;
+      const blocks = [...container.querySelectorAll(".data-slot-card")].map((el, index) => {
+        const rect = el.getBoundingClientRect();
+        return { index, el, top: rect.top - base, height: rect.height };
+      });
+      if (!blocks.some((block) => block.index === from)) return;
+      container.classList.add("is-reordering");
+      document.documentElement.classList.add("is-slot-reordering");
+      if (navigator.vibrate) navigator.vibrate(12);
+      session = {
+        from,
+        originClientY: clientY,
+        originScroll: scroller.scrollTop,
+        fingerY: clientY,
+        insertAt: from,
+        blocks,
+        scroller,
+        pointerId,
+        raf: 0,
+        last: performance.now(),
+      };
+      const tick = (now) => {
+        if (!session || session.pointerId !== pointerId) return;
+        const frame = session.scroller === document.scrollingElement || session.scroller === document.documentElement
+          ? { top: 0, bottom: window.innerHeight }
+          : session.scroller.getBoundingClientRect();
+        let velocity = 0;
+        if (session.fingerY < frame.top + SCROLL_ZONE) {
+          const depth = Math.min(1, (frame.top + SCROLL_ZONE - session.fingerY) / SCROLL_ZONE);
+          velocity = -SCROLL_MAX * depth;
+        } else if (session.fingerY > frame.bottom - SCROLL_ZONE) {
+          const depth = Math.min(1, (session.fingerY - (frame.bottom - SCROLL_ZONE)) / SCROLL_ZONE);
+          velocity = SCROLL_MAX * depth;
+        }
+        const dt = Math.min(40, now - session.last);
+        session.last = now;
+        if (velocity) session.scroller.scrollTop += velocity * dt;
+        const dragged = session.blocks.find((block) => block.index === session.from);
+        const scrollDelta = session.scroller.scrollTop - session.originScroll;
+        const visualTop = (dragged ? dragged.top : 0) + (session.fingerY - session.originClientY + scrollDelta);
+        const visualCenter = visualTop + (dragged ? dragged.height : 0) / 2;
+        const next = insertionIndex(session.blocks, session.from, visualCenter);
+        if (next !== session.insertAt) {
+          session.insertAt = next;
+          if (navigator.vibrate) navigator.vibrate(8);
+        }
+        applySession(true);
+        session.raf = requestAnimationFrame(tick);
+      };
+      session.raf = requestAnimationFrame(tick);
+      applySession(true);
     }
 
     container.querySelectorAll(".data-slot-handle").forEach((handle) => {
-      handle.addEventListener("pointerdown", (e) => {
-        if (e.button != null && e.button !== 0) return;
-        dragEl = handle.closest(".data-slot-card");
-        startIndex = [...container.querySelectorAll(".data-slot-card")].indexOf(dragEl);
-        dragging = false;
-        startY = e.clientY;
-        handle.setPointerCapture(e.pointerId);
-        e.preventDefault();
-      });
-      handle.addEventListener("pointermove", (e) => {
-        if (!dragEl) return;
-        if (!dragging && Math.abs(e.clientY - startY) < 6) return;
-        if (!dragging) {
-          dragging = true;
-          dragEl.classList.add("is-dragging");
-          container.classList.add("is-reordering");
-        }
-        const others = [...container.querySelectorAll(".data-slot-card")].filter((c) => c !== dragEl);
-        let placed = false;
-        for (const el of others) {
-          const r = el.getBoundingClientRect();
-          if (e.clientY < r.top + r.height / 2) {
-            container.insertBefore(dragEl, el);
-            placed = true;
-            break;
+      handle.addEventListener("pointerdown", (event) => {
+        if (event.button != null && event.button !== 0 || session) return;
+        event.preventDefault();
+        const card = handle.closest(".data-slot-card");
+        const from = [...container.querySelectorAll(".data-slot-card")].indexOf(card);
+        if (from < 0) return;
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const pointerId = event.pointerId;
+        let lifted = false;
+        let finished = false;
+        const cleanupWatch = () => {
+          window.clearTimeout(hold);
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+          window.removeEventListener("touchmove", blockTouch);
+        };
+        const blockTouch = (ev) => {
+          if (lifted) ev.preventDefault();
+        };
+        const hold = window.setTimeout(() => {
+          if (finished || lifted) return;
+          lifted = true;
+          beginLift(from, startY, pointerId);
+        }, HOLD_MS);
+        const onMove = (ev) => {
+          if (ev.pointerId !== pointerId) return;
+          if (!lifted) {
+            if (Math.hypot(ev.clientX - startX, ev.clientY - startY) <= SLOP_PX) return;
+            lifted = true;
+            window.clearTimeout(hold);
+            beginLift(from, ev.clientY, pointerId);
           }
-        }
-        if (!placed) container.appendChild(dragEl);
+          ev.preventDefault();
+          if (session && session.pointerId === pointerId) session.fingerY = ev.clientY;
+        };
+        const onUp = (ev) => {
+          if (ev.pointerId !== pointerId || finished) return;
+          finished = true;
+          cleanupWatch();
+          if (!lifted || !session || session.pointerId !== pointerId) return;
+          finish(ev.type !== "pointercancel");
+        };
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+        window.addEventListener("touchmove", blockTouch, { passive: false });
       });
-      handle.addEventListener("pointerup", () => finish(false));
-      handle.addEventListener("pointercancel", () => finish(true));
     });
   }
 
