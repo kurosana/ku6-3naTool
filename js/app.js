@@ -1180,6 +1180,11 @@
     }
 
     function beginLift(from, clientY, pointerId) {
+      container.querySelectorAll(".data-slot-card").forEach((el) => {
+        el.classList.remove("slot-stagger");
+        el.style.animation = "none";
+        el.style.animationDelay = "";
+      });
       const scroller = scrollParent(container);
       const base = container.getBoundingClientRect().top;
       const blocks = [...container.querySelectorAll(".data-slot-card")].map((el, index) => {

@@ -129,7 +129,7 @@ async function main() {
       assert("DataService.loadAll", true);
 
       const v = CONFIG && CONFIG.appVersion;
-      assert("CONFIG.appVersion", v === "v3.1.21", v || "missing");
+      assert("CONFIG.appVersion", v === "v3.1.22", v || "missing");
       assert("１０まんボルトの往復", DataService.parseJsonMoveName(DataService.formatMoveForJson("１０まんボルト"), "25") === "１０まんボルト");
       assert("めざめるパワーみずの往復", DataService.parseJsonMoveName(DataService.formatMoveForJson("めざめるパワーみず"), "121") === "めざめるパワーみず");
       assert("キュウコンのウェザーボールはほのお", DataService.parseJsonMoveName("WEATHER_BALL", "38") === "ウェザーボール(ほのお)");

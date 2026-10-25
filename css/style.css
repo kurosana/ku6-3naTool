@@ -2077,6 +2077,10 @@ a.btn-role {
   user-select: none;
   touch-action: none;
 }
+.data-slot-list.is-reordering .data-slot-card {
+  animation: none;
+  opacity: 1;
+}
 html.is-slot-reordering,
 html.is-slot-reordering body {
   user-select: none;
